@@ -102,21 +102,23 @@ class Regularizer:
 	
 	def regularization_var(self):
 		""" returns a theano scalar variable for how much penalty has been incurred """
-		assert len(self.penalties) > 0
-		return sum(self.penalties)
+		if len(self.penalties) > 0:
+			return sum(self.penalties)
+		return None
 
 class AdaGradParam:
 	""" only setup to do minimization """
 
-	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-2, grad_decay=0.9):
+	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-2, delta=1e-2):
 		""" cost should be a theano variable that this var should take gradients wrt
 			input_vars should be a list of variables for whic you'll provide values when you call update()
 		"""
 		debug = False
 
 		self.tvar = theano_mat	# should be a theano.shared
-		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type))
-		if debug: print 'gg.type =', self.gg.type
+		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type) * delta)
+		if debug:
+			print 'gg.type =', self.gg.type
 
 		# TODO upgrade to >=0.6rc5 and switch to float32s
 
@@ -124,19 +126,18 @@ class AdaGradParam:
 		# multiply a variable with dtype='float32' with a theano.tensor.constant,
 		# you get something back with dtype='float64'
 		# if you get errors in this code, that is almost certainly why (unless your on >=0.6rc5)
-		self.gd = T.constant(grad_decay)
 		self.lr = T.constant(learning_rate)
 
 		grad = theano.grad(cost=cost, wrt=self.tvar)
 		if debug: print 'grad.type =', grad.type
-		#gg_update = self.gg + (grad ** 2)                          # what's in the paper
-		gg_update = self.gd * self.gg + (1.0-self.gd) * (grad ** 2)	# what works
 
+		gg_update = self.gg + (grad ** 2)
 		tvar_update = self.tvar - self.lr * grad / (self.gg ** 0.5)
 		if debug:
 			print 'gg_update.type =', gg_update.type
 			print 'tvar_update.type =', tvar_update.type
 		self.updates = [(self.gg, gg_update), (self.tvar, tvar_update)]
+		print '[AdaGradParam __init__]', self.tvar.name, 'input_vars =', input_vars, type(input_vars)
 		self.f_update = theano.function(input_vars, grad, updates=self.updates)
 
 		if debug:
@@ -144,20 +145,39 @@ class AdaGradParam:
 			theano.printing.debugprint(self.f_update.maker.fgraph.outputs[0])
 			print
 
-	def update(self, args):
+	def update(self, args, verbose=False):
 		""" args should match input_vars provided to __init__ """
+		if verbose:
+			print "[AdaGradParam update] args =", args
+			print "[AdaGradParam update] %s: before   = %s" % (self.name, self.tvar.get_value())
 		g = self.f_update(*args)
+		if verbose:
+			print "[AdaGradParam update] %s: gradient = %s" % (self.name, g)
+			print "[AdaGradParam update] %s: after    = %s" % (self.name, self.tvar.get_value())
+		return g
 	
 	def __str__(self):
-		return "<AdaGradParam tvar.shape=%s lr=%g gd=%.2f gg.l2=%g>" % \
-			(self.tvar.get_value().shape, self.lr, self.gd, math.sqrt(sum(self.gg.get_value().flatten() ** 2)))
+		return "<AdaGradParam tvar.shape=%s lr=%g gg.l2=%g>" % \
+			(self.tvar.get_value().shape, self.lr.value,
+			np.linalg.norm(self.gg.get_value(), ord=2))
 	
-	def name(self): return self.tvar.name()
+	@property
+	def name(self): return self.tvar.name
+	@property
+	def shape(self): return self.tvar.get_value().shape
+	@property
 	def l0(self): return np.linalg.norm(self.tvar.get_value(), ord=0)
+	@property
 	def l1(self): return np.linalg.norm(self.tvar.get_value(), ord=1)
+	@property
 	def l2(self): return np.linalg.norm(self.tvar.get_value(), ord=2)
+	@property
 	def lInf(self): return np.linalg.norm(self.tvar.get_value(), ord=np.inf)
-
+	def contains_bad_values(self):
+		vals = self.tvar.get_value().flatten()
+		nan = np.isnan(vals).any()
+		inf = np.isinf(vals).any()
+		return nan or inf
 
 class VanillaEmbeddings:
 	""" Try learning without E+N/V for now """
@@ -174,8 +194,6 @@ class VanillaEmbeddings:
 		self.num_words = num_words
 		self.batch_size = batch_size
 
-	def setup_theano(self):
-
 		# 1-hidden layer network
 		self.W = theano.shared(np.zeros((self.num_words, self.d), dtype=float_type), name='W')	# word vecs
 		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype=float_type), name='A')	# word vecs => hidden
@@ -183,7 +201,7 @@ class VanillaEmbeddings:
 		self.p = theano.shared(np.zeros(self.h, dtype=float_type), name='p')					# hidden => output
 		self.t = theano.shared(0.0, name='t')
 
-		word_indices = T.imatrix('phrases')	# each row is a phrase, should have self.k columns
+		word_indices = T.imatrix('word_indices')	# each row is a phrase, should have self.k columns
 		n, k = word_indices.shape	# won't know this until runtime
 		phrases_tensor = self.W[word_indices]	# shape=(n, k, self.d)
 		phrases = phrases_tensor.reshape((n, k * self.d))
@@ -195,8 +213,8 @@ class VanillaEmbeddings:
 
 		# regularization
 		self.reg = Regularizer()
-		self.reg.l2(self.W, 1e-5)
-		self.reg.l1(self.A, 1e-4)
+		#self.reg.l2(self.W, 1e-5)
+		#self.reg.l1(self.A, 1e-4)
 
 		# loss
 		word_indices_corrupted = T.imatrix('word_indices_corrupted')
@@ -224,7 +242,6 @@ class VanillaEmbeddings:
 		print 'updates =', upd
 		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
 
-
 	def train(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
 		assert phrases.shape[1] == self.k
@@ -243,6 +260,7 @@ class VanillaEmbeddings:
 					print 'A.l1 =', self.params['A'].l1()
 					print 'A.l2 =', self.params['A'].l2()
 
+	# user-friendly version
 	def score(self, words, alph):
 		""" gives the NNs score of this phrase
 			words should be a list of strings and alph and Alphabet containing those strings
@@ -252,7 +270,34 @@ class VanillaEmbeddings:
 		i = np.mat( np.array(w, dtype='int32') )
 		return self.f_score(i)[0]
 
-	def init_weights(self):
+	def raw_score(self, phrases):
+		""" expects a matrix of word indices, rows are phrases """
+		N, k = phrases.shape
+		assert k == self.k
+		return self.f_score(phrases)[0]
+	
+	def loss(self, phrases, corrupted_phrases, avg=True):
+		""" returns the hinge loss on this data """
+		assert phrases.shape == corrupted_phrases.shape
+		g = self.raw_score(phrases)
+		b = self.raw_score(corrupted_phrases)
+
+		debug = False
+		if debug:
+			print 'uncorrupted scores ='
+			print g[:100]
+			print 'corrupted scores ='
+			print b[:100]
+
+		one = np.ones_like(g)
+		hinge = one + b - g
+		hinge = hinge * (hinge > 0.0)
+		if avg:
+			return hinge.mean()
+		else:
+			return hinge.sum()
+
+	def init_weights(self, scale=1.0):
 
 		def set_rand_value(theano_tensor, scale=1.0):
 			old_vals = theano_tensor.get_value()
@@ -268,10 +313,10 @@ class VanillaEmbeddings:
 				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
 			theano_tensor.set_value(new_vals)
 
-		#set_rand_value(self.W, scale=1e-5)
-		set_unif_value(self.A, 1e-3)
-		#set_rand_value(self.b, scale=1e-7)
-		set_rand_value(self.p, scale=1e-2)
+		#set_rand_value(self.W, scale=1e-5*scale)
+		set_unif_value(self.A, 1e-3*scale)
+		#set_rand_value(self.b, scale=1e-7*scale)
+		set_rand_value(self.p, scale=1e-2*scale)
 		#self.t.set_value(0.0)
 	
 	def read_weights(self, filename):
@@ -289,6 +334,13 @@ class VanillaEmbeddings:
 		corrupted[:,mid] = np.random.random_integers(0, self.num_words-1, n)
 		return corrupted
 
+	def check_for_bad_params(self):
+		bad = []
+		for name, param in self.params.iteritems():
+			if param.contains_bad_values():
+				print name, 'contains bad values'
+				bad.append(param)
+		return bad
 
 if __name__ == '__main__':
 

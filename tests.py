@@ -1,5 +1,8 @@
 
 from learn_word_vecs import *
+import numpy as np
+import numpy.random as rand
+import sys
 
 class AdaGradParamTest:
 	def run(self):
@@ -7,11 +10,23 @@ class AdaGradParamTest:
 		in_var = T.dvector('in_var')
 		v = theano.shared(np.ones((2,5)))
 		cost = T.dot(v, in_var).norm(2)
-		p = AdaGradParam(v, [in_var], cost, learning_rate=1e-2)
+		p = AdaGradParam(v, [in_var], cost, learning_rate=0.1)
 		print 'before any updates:', p, v.get_value()
 		print
 
+		itr = 0
+
 		# step 1
+		itr += 1
+		in_val = np.random.rand(5)
+		print 'in_val =', in_val
+		p.update([in_val])
+		print 'after 1 update: param =', p, 'v =', v.get_value()
+		print 'gg =', p.gg.get_value()
+		print
+
+		# step 2
+		itr += 1
 		in_val = np.random.rand(5)
 		print 'in_val =', in_val
 		p.update([in_val])
@@ -20,11 +35,27 @@ class AdaGradParamTest:
 		print
 
 		# limit: v should go to 0
-		itr = 300
-		for i in range(itr):
+		itr += 100
+		for i in range(100):
 			in_val = np.random.rand(5)
 			p.update([in_val])
-		print 'after', (itr+1), 'updates: param =', p, 'v =', v.get_value()
+		print 'after', itr, 'updates: param =', p, 'v =', v.get_value()
+		print 'gg =', p.gg.get_value()
+		print
+
+		itr += 1000
+		for i in range(1000):
+			in_val = np.random.rand(5)
+			p.update([in_val])
+		print 'after', itr, 'updates: param =', p, 'v =', v.get_value()
+		print 'gg =', p.gg.get_value()
+		print
+
+		itr += 10000
+		for i in range(10000):
+			in_val = np.random.rand(5)
+			p.update([in_val])
+		print 'after', itr, 'updates: param =', p, 'v =', v.get_value()
 		print 'gg =', p.gg.get_value()
 		print
 		
@@ -41,13 +72,112 @@ class VanillaEmbeddingsTest:
 	def basic(self):
 	
 		W = self.windows.get_phrase_matrix()
-		ve = VanillaEmbeddings(len(self.alph), 3)
+		N, k = W.shape
+		ve = VanillaEmbeddings(len(self.alph), k, d=64, h=32)
+		ve.init_weights(scale=100.0)
 		print 'W.shape =', W.shape
-		W_bad = ve.corrupt(W)
-		print 'orig      =', W[1:10,]
-		print 'corrupted =', W_bad[1:10,]
 
+		Z = ve.corrupt(W)
+		print 'orig      =', W[1:10,]
+		print 'corrupted =', Z[1:10,]
+
+		idx = list(range(N))
+		rand.shuffle(idx)
+		i = int(N * 0.8)
+		train_idx = idx[:i]
+		dev_idx = idx[i:]
 		
+		W_train = W[train_idx,]
+		Z_train = Z[train_idx,]
+		W_dev = W[dev_idx,]
+		Z_dev = Z[dev_idx,]
+
+		N_train = W_train.shape[0]
+		N_dev = W_dev.shape[0]
+		print "there are %d training instances and %d dev" % (N_train, N_dev)
+
+		print 'at start, dev.hinge =', ve.loss(W_dev, Z_dev, avg=False)
+
+		for name, param in ve.params.iteritems():
+			print name, 'has shape', param.shape
+
+		# try to make sense of the gradient
+		#batch_loss = ve.f_step(W[1:100,], Z[1:100,])
+		#print 'batch_loss =', batch_loss
+		print 'W.l2 before =', ve.params['W'].l2
+		print 'ggW before =', ve.params['W'].gg.get_value()
+		r = rand.choice(N_train, 2, replace=False)
+		print 'W[r,] =', W[r,]
+		print 'Z[r,] =', Z[r,]
+		p = [W[r,], Z[r,]]
+		print 'p =', p, type(p)
+		dW = ve.params['W'].update(p, verbose=True)
+		print 'dW =', dW
+		print 'W.l2 after =', ve.params['W'].l2
+		print 'ggW after =', ve.params['W'].gg.get_value()
+
+		# below this seems to work
+
+
+
+		print '*' * 100
+		for i in range(50):
+			print
+		print '*' * 100
+
+
+
+
+
+
+
+		def show_params():
+			print 'W.l1 =', ve.params['W'].l1
+			print 'W.lInf =', ve.params['W'].lInf
+			print 'A.l1 =', ve.params['A'].l1
+			print 'A.lInf =', ve.params['A'].lInf
+			bad = ve.check_for_bad_params()
+
+		# take one grad setup with this batch size
+		def batch(size, verbose=False):
+			if verbose:
+				print 'taking a gradient step with', size, 'instances'
+			r = rand.choice(N_train, size)
+			W = W_train[r,]
+			Z = Z_train[r,]
+			if verbose:
+				print 'subset =', r
+				print 'W[r,] =', W
+				print 'Z[r,] =', Z
+			ve.f_step(W, Z)
+			#ve.params['W'].update([W,Z], verbose=verbose)
+			#ve.params['A'].update([W,Z], verbose=verbose)
+			if verbose:
+				print
+				print
+				print
+				print
+				print
+				print
+				print
+				print
+
+		print 'starting...'
+		sys.stdout.flush()
+
+		show_params()
+		start = time.clock()
+		bs = 500
+		for i in range(5000):
+			#batch(bs, verbose=True)
+			for j in range(50):
+				batch(bs)
+			#batch(bs, verbose=True)
+			#show_params()
+			t = time.clock() - start
+			print i, t, 'dev.hinge =', ve.loss(W_dev, Z_dev, avg=False)
+			sys.stdout.flush()
+
 
 		return False
 
@@ -58,7 +188,6 @@ class VanillaEmbeddingsTest:
 		print
 		print 'making vanilla embeddings...'
 		emb = VanillaEmbeddings(len(a), k=3, d=10, h=3, batch_size=20)
-		emb.setup_theano()
 		emb.init_weights()
 
 		print 'training...'
