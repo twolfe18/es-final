@@ -70,20 +70,21 @@ class VanillaEmbeddings:
 	
 	# TODO needs to be able to read in vectors
 
-	def __init__(self, num_words):
-		self.d = 64					# number of features per word
-		self.h = int(self.d * 0.8)	# hidden layer size
-		self.k = 5					# how many words in a window
+	def __init__(self, num_words, k, d=64, h=40, batch_size=30):
+		self.d = d	# number of features per word
+		self.h = h	# hidden layer size
+		self.k = k	# how many words in a window
 		self.num_words = num_words
+		self.batch_size = batch_size
 
 	def setup_theano(self):
 
 		# 1-hidden layer network
-		self.W = theano.shared(np.zeros((self.num_words, self.d), dtype='float32'))		# word vecs
-		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype='float32'))	# word vecs => hidden
-		self.b = theano.shared(np.zeros(self.h, dtype='float32'))						# hidden offset
-		self.p = theano.shared(np.zeros(self.h, dtype='float32'))						# hidden => output
-		self.t = theano.shared(0.0)
+		self.W = theano.shared(np.zeros((self.num_words, self.d), dtype='float32'), name='W')	# word vecs
+		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype='float32'), name='A')	# word vecs => hidden
+		self.b = theano.shared(np.zeros(self.h, dtype='float32'), name='b')						# hidden offset
+		self.p = theano.shared(np.zeros(self.h, dtype='float32'), name='p')						# hidden => output
+		self.t = theano.shared(0.0, name='t')
 
 		word_indices = T.imatrix('phrases')	# each row is a phrase, should have self.k columns
 		n, k = word_indices.shape	# won't know this until runtime
@@ -98,11 +99,12 @@ class VanillaEmbeddings:
 		# SGD step function
 		word_indices_corrupted = T.imatrix('word_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
-		loss = T.ones_like(scores) + scores_corrupted - scores
-		loss = loss * (loss > 0)
+		loss_ = T.ones_like(scores) + scores_corrupted - scores
+		loss = loss_ * (loss_ > 0)
 		avg_loss = loss.mean()
 		self.learning_rates = {self.W : 1e-2, self.A : 1e-3, self.b : 1e-3, self.p : 1e-3, self.t : 1e-3}
 		updates = []
+		grads = {}
 		for param, lr in self.learning_rates.iteritems():
 			grad = theano.grad(cost=avg_loss, wrt=param)
 			update = param - grad
@@ -111,24 +113,62 @@ class VanillaEmbeddings:
 			print 'update=', update
 			print
 			updates.append( (param, update) )
+			grads[param.name] = grad
+
 		self.step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=updates)
+
+		dscore = theano.grad(cost=scores.mean(), wrt=self.W)
+		self.step_debug = theano.function([word_indices, word_indices_corrupted],
+			[avg_loss, scores, scores_corrupted,
+			 dscore,
+			 grads['W'], grads['A'], grads['b'], grads['p'], grads['t']], updates=updates)
 
 
 	def train(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
 		assert phrases.shape[1] == self.k
-		epochs = 10
+		epochs = 100
 		N = len(phrases)
-		batch_size = 20
 		phrases_corrupted = self.corrupt(phrases)
 		for e in range(epochs):
 			print "starting epoch %d" % (e)
-			for i in range(0, N, batch_size):
-				j = min(i + batch_size, N)
+			for i in range(0, N, self.batch_size):
+				j = min(i + self.batch_size, N)
 				avg_loss = self.step(phrases[i:j,], phrases_corrupted[i:j,])[0]
-				print "e=%d i=%d avg_loss=%.5g" % (e, i, avg_loss)
-				#print 'some vector =', self.W.get_value()[5,]
-				#print 'p vector =', self.p.get_value()
+				if np.random.randint(100) == 0:
+					print "e=%d i=%d avg_loss=%.5g" % (e, i, avg_loss)
+					print 'some vector =', self.W.get_value()[5,]
+					print 'p vector =', self.p.get_value()
+					print 'W.l1 = ', sum(abs(self.W.get_value()))
+					print 'W.l2 = ', sum(self.W.get_value() ** 2)
+					print 'A.l1 = ', sum(abs(self.A.get_value()))
+					print 'A.l2 = ', sum(self.A.get_value() ** 2)
+
+
+	def debug_train(self, phrases):
+		phrases_corrupted = self.corrupt(phrases)
+		for i in range(5):
+			j = i+1
+			p = phrases[i:j,]
+			pc = phrases_corrupted[i:j,]
+			avg_loss, s, sc, stupid, dW, dA, db, dp, dt = self.step_debug(p, pc)
+			print "original  = %s score=%.5f" % (p, s)
+			print "corrupted = %s score=%.5f" % (pc, sc)
+			print 'avg_loss =', avg_loss
+			print 'dW =', dW
+			print 'dA =', dA
+			print 'db =', db
+			print 'dp =', dp
+			print 'dt =', dt
+			print 'stupid =', stupid
+			print
+			print 'W =', self.W.get_value()
+			print 'A =', self.A.get_value()
+			print 'b =', self.b.get_value()
+			print 'p =', self.p.get_value()
+			print 't =', self.t.get_value()
+			print
+			print
 
 
 	def score(self, words, alph):
@@ -140,20 +180,27 @@ class VanillaEmbeddings:
 		i = np.mat( np.array(w, dtype='int32') )
 		return self.f_score(i)[0]
 
-	def set_random_weights(self):
+	def init_weights(self):
 
 		def set_rand_value(theano_tensor, scale=1.0):
 			old_vals = theano_tensor.get_value()
-			new_vals = np.random.rand(*old_vals.shape) * scale
+			new_vals = (np.random.rand(*old_vals.shape) - 0.5) * scale
 			if(old_vals.dtype != new_vals.dtype):
 				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
 			theano_tensor.set_value(new_vals)
 
-		set_rand_value(self.W, scale=1e-5)
-		set_rand_value(self.A, scale=1e-7)
-		set_rand_value(self.b, scale=1e-7)
-		set_rand_value(self.p, scale=1e-6)
-		self.t.set_value(0.0)
+		def set_unif_value(theano_tensor, value):
+			old_vals = theano_tensor.get_value()
+			new_vals = np.tile(value, old_vals.shape)
+			if(old_vals.dtype != new_vals.dtype):
+				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
+			theano_tensor.set_value(new_vals)
+
+		#set_rand_value(self.W, scale=1e-5)
+		set_unif_value(self.A, 1e-3)
+		#set_rand_value(self.b, scale=1e-7)
+		set_rand_value(self.p, scale=1e-2)
+		#self.t.set_value(0.0)
 
 	def corrupt(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
@@ -170,11 +217,13 @@ class VanillaEmbeddings:
 if __name__ == '__main__':
 	start = time.clock()
 	a = Alphabet()
-	r = WindowReader('windows.small', alph=a)
+	#r = WindowReader('windows.small', alph=a)
+	r = WindowReader('fake_data.txt', alph=a)
 	W = np.array(list(r.get_int_lines()))
 	print 'windows', W.shape, 'len(alph)', len(a)
 	print "done, took %.1f seconds" % (time.clock()-start)
 
+	"""
 	# count how many instances have one of the nomlex words in it
 	nv = NomlexReader('nomlex.txt', a)
 	nomlex_pairs = set(np.array(list(nv.get_pairs())).flatten())
@@ -183,18 +232,19 @@ if __name__ == '__main__':
 		if len(set(window) & nomlex_pairs) > 0:
 			pos += 1
 	print "%d of %d (%.1f%%) examples have a nomlex word in them" % (pos, len(W), (100.0*pos)/len(W))
-
-
-
+	"""
 
 	print 'making vanilla embeddings...'
-	emb = VanillaEmbeddings(len(a))
+	emb = VanillaEmbeddings(len(a), k=3, d=10, h=3, batch_size=20)
 	emb.setup_theano()
-	emb.set_random_weights()
+	emb.init_weights()
 
+	"""
 	phrase = ['the', 'quick', 'brown', 'fox', 'jump']
 	score = emb.score(phrase, a)	# these words appear in windows.small
 	print "score for %s is %.3f" % (' '.join(phrase), score)
+	"""
 
+	emb.debug_train(W)
 	emb.train(W)
 

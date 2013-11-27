@@ -2,9 +2,9 @@
 import sys
 import numpy as np
 
-num_words = 80
+num_words = 15
 num_examples = 250000
-agreeability = 12
+agreeability = 4
 window_size = 3
 
 def adjacency_matrix():
