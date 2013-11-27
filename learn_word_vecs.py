@@ -65,6 +65,37 @@ class WindowReader:
 		for words in self.get_word_lines():
 			yield np.array([self.word2idx.lookup_index(w, add=True) for w in words], dtype=int_type)
 
+class Regularizer:
+
+	def __init__(self):
+		self.seen = set()
+		self.penalties = []
+		#self.penalties.append(T.dscalar('reg-placeholder'))
+
+	def l1(self, var, coef):
+		self.elastic_net(var, coef, 0.0)
+
+	def l2(self, var, coef):
+		self.elastic_net(var, 0.0, coef)
+		
+	def elastic_net(self, var, l1_coef, l2_coef):
+		assert l1_coef >= 0.0 and l2_coef >= 0.0
+		if var in self.seen:
+			raise 'you should regularize once!'
+		else:
+			self.seen.add(var)
+		if l1_coef > 0.0:
+			p1 = T.sum(abs(var.flatten()))
+			self.penalties.append(p1 * -l1_coef)
+		if l2_coef > 0.0:
+			p2 = T.sum(var.flatten() ** 2.0)
+			self.penalties.append(p2 * -l2_coef)
+	
+	def regularization_var(self):
+		""" returns a theano scalar variable for how much penalty has been incurred """
+		return sum(self.penalties)
+
+
 class VanillaEmbeddings:
 	""" Try learning without E+N/V for now """
 	
@@ -96,12 +127,17 @@ class VanillaEmbeddings:
 		# score function
 		self.f_score = theano.function([word_indices], [scores])
 
+		# regularization
+		self.reg = Regularizer()
+		self.reg.l2(self.W, 1e-6)
+		self.reg.l1(self.A, 1e-5)
+
 		# SGD step function
 		word_indices_corrupted = T.imatrix('word_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
 		loss_ = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_ * (loss_ > 0)
-		avg_loss = loss.mean()
+		avg_loss = loss.mean() + self.reg.regularization_var()
 		self.learning_rates = {self.W : 1e-2, self.A : 1e-3, self.b : 1e-3, self.p : 1e-3, self.t : 1e-3}
 		updates = []
 		grads = {}
