@@ -85,15 +85,40 @@ class Regularizer:
 		else:
 			self.seen.add(var)
 		if l1_coef > 0.0:
-			p1 = T.sum(abs(var.flatten()))
-			self.penalties.append(p1 * -l1_coef)
+			self.penalties.append(var.norm(1) * -l1_coef)
 		if l2_coef > 0.0:
-			p2 = T.sum(var.flatten() ** 2.0)
-			self.penalties.append(p2 * -l2_coef)
+			self.penalties.append(var.norm(2) * -l2_coef)
 	
 	def regularization_var(self):
 		""" returns a theano scalar variable for how much penalty has been incurred """
 		return sum(self.penalties)
+
+
+class AdaGradParam:
+
+	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-2, grad_decay=0.9):
+		""" cost should be a theano variable that this var should take gradients wrt
+			input_vars ...
+		"""
+		self.tvar = theano_mat	# should already be a theano.shared
+		self.lr = learning_rate
+		self.gd = grad_decay
+		self.gg = theano.shared(theano.ones_like(self.tvar))
+
+		grad = theano.grad(cost=cost, wrt=self.tvar)
+		gg_update = self.gd * self.gg + (1.0-self.gd) * (grad ** 2)
+		tvar_update = self.tvar - self.lr * grad / self.gg
+		self.f_update = theano.function(input_vars, grad,
+			updates=[(self.gg, gg_update), (self.tvar, tvar_update)])
+
+	def update(self, args):
+		""" args should match input_vars provided to __init__ """
+		g = self.f_update(*args)
+		print 'grad =', g
+	
+	def name(): return self.tvar.name()
+	def l1(): return self.tvar.get_value().norm(1)
+	def l2(): return self.tvar.get_value().norm(2)
 
 
 class VanillaEmbeddings:
@@ -129,27 +154,58 @@ class VanillaEmbeddings:
 
 		# regularization
 		self.reg = Regularizer()
-		self.reg.l2(self.W, 1e-6)
-		self.reg.l1(self.A, 1e-5)
+		self.reg.l2(self.W, 1e-5)
+		self.reg.l1(self.A, 1e-4)
 
-		# SGD step function
+		# loss
 		word_indices_corrupted = T.imatrix('word_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
 		loss_ = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_ * (loss_ > 0)
-		avg_loss = loss.mean() + self.reg.regularization_var()
+		r = self.reg.regularization_var()
+		if r is None:
+			avg_loss = loss.mean()
+		else:
+			avg_loss = loss.mean() + r
+
+
+		# EXPERIMENTAL
+		args = [word_indices, word_indices_corrupted]
+		self.params = {}
+		self.params['W'] = AdaGradParam(self.W, args, avg_loss, learning_rate=1.0)
+		self.params['A'] = AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1)
+		self.params['b'] = AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2)
+		self.params['p'] = AdaGradParam(self.p, args, avg_loss, learning_rate=1e-3)
+		self.params['t'] = AdaGradParam(self.t, args, avg_loss, learning_rate=1e-4)
+		def new_train(phrases):
+			corrupted = None
+			for name, param in self.params.iteritems():
+				args = (phrases, corrupted)
+				param.update(args)
+
+
+
+		# update (step in optimization)
 		self.learning_rates = {self.W : 1e-2, self.A : 1e-3, self.b : 1e-3, self.p : 1e-3, self.t : 1e-3}
 		updates = []
 		grads = {}
 		for param, lr in self.learning_rates.iteritems():
 			grad = theano.grad(cost=avg_loss, wrt=param)
-			update = param - grad
+			#lrt = T.alloc(lr, grad.shape)
+			update = param - grad #* T.as_tensor(lr)
 			print 'lr=', lr
 			print 'param=', param
 			print 'update=', update
 			print
 			updates.append( (param, update) )
 			grads[param.name] = grad
+
+		dW = theano.grad(cost=avg_loss, wrt=self.W)
+		dA = theano.grad(cost=avg_loss, wrt=self.A)
+		db = theano.grad(cost=avg_loss, wrt=self.b)
+		dp = theano.grad(cost=avg_loss, wrt=self.p)
+		dt = theano.grad(cost=avg_loss, wrt=self.t)
+		self.gradient = theano.function([word_indices, word_indices_corrupted], [avg_loss, dW, dA, db, dp, dt])
 
 		self.step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=updates)
 
@@ -158,7 +214,6 @@ class VanillaEmbeddings:
 			[avg_loss, scores, scores_corrupted,
 			 dscore,
 			 grads['W'], grads['A'], grads['b'], grads['p'], grads['t']], updates=updates)
-
 
 	def train(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
