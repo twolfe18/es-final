@@ -1,9 +1,14 @@
-import numpy as np
+import sys
+import math
 import time
+import itertools
+import numpy as np
 import theano
 import theano.tensor as T
 
+# TODO upgrade to >=0.6rc5 and switch to float32s
 int_type = 'int32'
+float_type = 'float64'
 
 class Alphabet:
 
@@ -51,6 +56,7 @@ class WindowReader:
 			self.word2idx = Alphabet()
 		else:
 			self.word2idx = alph
+		self.phrase_mat = None
 
 	def get_alphabet(self):
 		return self.word2idx
@@ -64,13 +70,18 @@ class WindowReader:
 	def get_int_lines(self):
 		for words in self.get_word_lines():
 			yield np.array([self.word2idx.lookup_index(w, add=True) for w in words], dtype=int_type)
+	
+	def get_phrase_matrix(self):
+		""" return a matrix where rows are phrases, should be ~5 columns, entries are ints taken from alph """
+		if self.phrase_mat is None:
+			self.phrase_mat = np.array(list(self.get_int_lines()))
+		return self.phrase_mat
 
 class Regularizer:
 
 	def __init__(self):
 		self.seen = set()
 		self.penalties = []
-		#self.penalties.append(T.dscalar('reg-placeholder'))
 
 	def l1(self, var, coef):
 		self.elastic_net(var, coef, 0.0)
@@ -91,42 +102,72 @@ class Regularizer:
 	
 	def regularization_var(self):
 		""" returns a theano scalar variable for how much penalty has been incurred """
+		assert len(self.penalties) > 0
 		return sum(self.penalties)
 
-
 class AdaGradParam:
+	""" only setup to do minimization """
 
 	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-2, grad_decay=0.9):
 		""" cost should be a theano variable that this var should take gradients wrt
-			input_vars ...
+			input_vars should be a list of variables for whic you'll provide values when you call update()
 		"""
-		self.tvar = theano_mat	# should already be a theano.shared
-		self.lr = learning_rate
-		self.gd = grad_decay
-		self.gg = theano.shared(theano.ones_like(self.tvar))
+		debug = False
+
+		self.tvar = theano_mat	# should be a theano.shared
+		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type))
+		if debug: print 'gg.type =', self.gg.type
+
+		# TODO upgrade to >=0.6rc5 and switch to float32s
+
+		# there is a bug that has been fixed by 0.6rc5 where when you
+		# multiply a variable with dtype='float32' with a theano.tensor.constant,
+		# you get something back with dtype='float64'
+		# if you get errors in this code, that is almost certainly why (unless your on >=0.6rc5)
+		self.gd = T.constant(grad_decay)
+		self.lr = T.constant(learning_rate)
 
 		grad = theano.grad(cost=cost, wrt=self.tvar)
-		gg_update = self.gd * self.gg + (1.0-self.gd) * (grad ** 2)
-		tvar_update = self.tvar - self.lr * grad / self.gg
-		self.f_update = theano.function(input_vars, grad,
-			updates=[(self.gg, gg_update), (self.tvar, tvar_update)])
+		if debug: print 'grad.type =', grad.type
+		#gg_update = self.gg + (grad ** 2)                          # what's in the paper
+		gg_update = self.gd * self.gg + (1.0-self.gd) * (grad ** 2)	# what works
+
+		tvar_update = self.tvar - self.lr * grad / (self.gg ** 0.5)
+		if debug:
+			print 'gg_update.type =', gg_update.type
+			print 'tvar_update.type =', tvar_update.type
+		self.updates = [(self.gg, gg_update), (self.tvar, tvar_update)]
+		self.f_update = theano.function(input_vars, grad, updates=self.updates)
+
+		if debug:
+			print 'f_update ='
+			theano.printing.debugprint(self.f_update.maker.fgraph.outputs[0])
+			print
 
 	def update(self, args):
 		""" args should match input_vars provided to __init__ """
 		g = self.f_update(*args)
-		print 'grad =', g
 	
-	def name(): return self.tvar.name()
-	def l1(): return self.tvar.get_value().norm(1)
-	def l2(): return self.tvar.get_value().norm(2)
+	def __str__(self):
+		return "<AdaGradParam tvar.shape=%s lr=%g gd=%.2f gg.l2=%g>" % \
+			(self.tvar.get_value().shape, self.lr, self.gd, math.sqrt(sum(self.gg.get_value().flatten() ** 2)))
+	
+	def name(self): return self.tvar.name()
+	def l0(self): return np.linalg.norm(self.tvar.get_value(), ord=0)
+	def l1(self): return np.linalg.norm(self.tvar.get_value(), ord=1)
+	def l2(self): return np.linalg.norm(self.tvar.get_value(), ord=2)
+	def lInf(self): return np.linalg.norm(self.tvar.get_value(), ord=np.inf)
 
 
 class VanillaEmbeddings:
 	""" Try learning without E+N/V for now """
 	
-	# TODO needs to be able to read in vectors
+	# TODO need to have a dev set for reporting performance
+	# TODO needs to be able to read/write state
 
 	def __init__(self, num_words, k, d=64, h=40, batch_size=30):
+		assert k >= 3 and k % 2 == 1
+		assert num_words > k
 		self.d = d	# number of features per word
 		self.h = h	# hidden layer size
 		self.k = k	# how many words in a window
@@ -136,10 +177,10 @@ class VanillaEmbeddings:
 	def setup_theano(self):
 
 		# 1-hidden layer network
-		self.W = theano.shared(np.zeros((self.num_words, self.d), dtype='float32'), name='W')	# word vecs
-		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype='float32'), name='A')	# word vecs => hidden
-		self.b = theano.shared(np.zeros(self.h, dtype='float32'), name='b')						# hidden offset
-		self.p = theano.shared(np.zeros(self.h, dtype='float32'), name='p')						# hidden => output
+		self.W = theano.shared(np.zeros((self.num_words, self.d), dtype=float_type), name='W')	# word vecs
+		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype=float_type), name='A')	# word vecs => hidden
+		self.b = theano.shared(np.zeros(self.h, dtype=float_type), name='b')					# hidden offset
+		self.p = theano.shared(np.zeros(self.h, dtype=float_type), name='p')					# hidden => output
 		self.t = theano.shared(0.0, name='t')
 
 		word_indices = T.imatrix('phrases')	# each row is a phrase, should have self.k columns
@@ -160,60 +201,29 @@ class VanillaEmbeddings:
 		# loss
 		word_indices_corrupted = T.imatrix('word_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
-		loss_ = T.ones_like(scores) + scores_corrupted - scores
-		loss = loss_ * (loss_ > 0)
+		loss_neg = T.ones_like(scores) + scores_corrupted - scores
+		loss = loss_neg * (loss_neg > 0)
 		r = self.reg.regularization_var()
 		if r is None:
 			avg_loss = loss.mean()
 		else:
 			avg_loss = loss.mean() + r
 
-
-		# EXPERIMENTAL
 		args = [word_indices, word_indices_corrupted]
-		self.params = {}
-		self.params['W'] = AdaGradParam(self.W, args, avg_loss, learning_rate=1.0)
-		self.params['A'] = AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1)
-		self.params['b'] = AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2)
-		self.params['p'] = AdaGradParam(self.p, args, avg_loss, learning_rate=1e-3)
-		self.params['t'] = AdaGradParam(self.t, args, avg_loss, learning_rate=1e-4)
-		def new_train(phrases):
-			corrupted = None
-			for name, param in self.params.iteritems():
-				args = (phrases, corrupted)
-				param.update(args)
+		print 'args =', args
+		self.params = {
+			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=1.0),
+			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1),
+			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2),
+			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-3),
+			't' : AdaGradParam(self.t, args, avg_loss, learning_rate=1e-4) \
+		}
 
+		upd = [p.updates for p in self.params.values()]
+		upd = list(itertools.chain(*upd))	# flatten list
+		print 'updates =', upd
+		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
 
-
-		# update (step in optimization)
-		self.learning_rates = {self.W : 1e-2, self.A : 1e-3, self.b : 1e-3, self.p : 1e-3, self.t : 1e-3}
-		updates = []
-		grads = {}
-		for param, lr in self.learning_rates.iteritems():
-			grad = theano.grad(cost=avg_loss, wrt=param)
-			#lrt = T.alloc(lr, grad.shape)
-			update = param - grad #* T.as_tensor(lr)
-			print 'lr=', lr
-			print 'param=', param
-			print 'update=', update
-			print
-			updates.append( (param, update) )
-			grads[param.name] = grad
-
-		dW = theano.grad(cost=avg_loss, wrt=self.W)
-		dA = theano.grad(cost=avg_loss, wrt=self.A)
-		db = theano.grad(cost=avg_loss, wrt=self.b)
-		dp = theano.grad(cost=avg_loss, wrt=self.p)
-		dt = theano.grad(cost=avg_loss, wrt=self.t)
-		self.gradient = theano.function([word_indices, word_indices_corrupted], [avg_loss, dW, dA, db, dp, dt])
-
-		self.step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=updates)
-
-		dscore = theano.grad(cost=scores.mean(), wrt=self.W)
-		self.step_debug = theano.function([word_indices, word_indices_corrupted],
-			[avg_loss, scores, scores_corrupted,
-			 dscore,
-			 grads['W'], grads['A'], grads['b'], grads['p'], grads['t']], updates=updates)
 
 	def train(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
@@ -225,42 +235,13 @@ class VanillaEmbeddings:
 			print "starting epoch %d" % (e)
 			for i in range(0, N, self.batch_size):
 				j = min(i + self.batch_size, N)
-				avg_loss = self.step(phrases[i:j,], phrases_corrupted[i:j,])[0]
+				avg_loss = self.f_step(phrases[i:j,], phrases_corrupted[i:j,])[0]
 				if np.random.randint(100) == 0:
 					print "e=%d i=%d avg_loss=%.5g" % (e, i, avg_loss)
-					print 'some vector =', self.W.get_value()[5,]
-					print 'p vector =', self.p.get_value()
-					print 'W.l1 = ', sum(abs(self.W.get_value()))
-					print 'W.l2 = ', sum(self.W.get_value() ** 2)
-					print 'A.l1 = ', sum(abs(self.A.get_value()))
-					print 'A.l2 = ', sum(self.A.get_value() ** 2)
-
-
-	def debug_train(self, phrases):
-		phrases_corrupted = self.corrupt(phrases)
-		for i in range(5):
-			j = i+1
-			p = phrases[i:j,]
-			pc = phrases_corrupted[i:j,]
-			avg_loss, s, sc, stupid, dW, dA, db, dp, dt = self.step_debug(p, pc)
-			print "original  = %s score=%.5f" % (p, s)
-			print "corrupted = %s score=%.5f" % (pc, sc)
-			print 'avg_loss =', avg_loss
-			print 'dW =', dW
-			print 'dA =', dA
-			print 'db =', db
-			print 'dp =', dp
-			print 'dt =', dt
-			print 'stupid =', stupid
-			print
-			print 'W =', self.W.get_value()
-			print 'A =', self.A.get_value()
-			print 'b =', self.b.get_value()
-			print 'p =', self.p.get_value()
-			print 't =', self.t.get_value()
-			print
-			print
-
+					print 'W.l1 =', self.params['W'].l1()
+					print 'W.l2 =', self.params['W'].l2()
+					print 'A.l1 =', self.params['A'].l1()
+					print 'A.l2 =', self.params['A'].l2()
 
 	def score(self, words, alph):
 		""" gives the NNs score of this phrase
@@ -292,6 +273,12 @@ class VanillaEmbeddings:
 		#set_rand_value(self.b, scale=1e-7)
 		set_rand_value(self.p, scale=1e-2)
 		#self.t.set_value(0.0)
+	
+	def read_weights(self, filename):
+		raise 'imlement me!'
+	
+	def write_weights(self, filename):
+		raise 'imlement me!'
 
 	def corrupt(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
@@ -300,21 +287,11 @@ class VanillaEmbeddings:
 		mid = k // 2
 		corrupted = phrases.copy()
 		corrupted[:,mid] = np.random.random_integers(0, self.num_words-1, n)
-		print '[corrupt] orig =', phrases[1:10,]
-		print '[corrupt] corrupted =', corrupted[1:10,]
 		return corrupted
 
 
 if __name__ == '__main__':
-	start = time.clock()
-	a = Alphabet()
-	#r = WindowReader('windows.small', alph=a)
-	r = WindowReader('fake_data.txt', alph=a)
-	W = np.array(list(r.get_int_lines()))
-	print 'windows', W.shape, 'len(alph)', len(a)
-	print "done, took %.1f seconds" % (time.clock()-start)
 
-	"""
 	# count how many instances have one of the nomlex words in it
 	nv = NomlexReader('nomlex.txt', a)
 	nomlex_pairs = set(np.array(list(nv.get_pairs())).flatten())
@@ -323,19 +300,8 @@ if __name__ == '__main__':
 		if len(set(window) & nomlex_pairs) > 0:
 			pos += 1
 	print "%d of %d (%.1f%%) examples have a nomlex word in them" % (pos, len(W), (100.0*pos)/len(W))
-	"""
 
-	print 'making vanilla embeddings...'
-	emb = VanillaEmbeddings(len(a), k=3, d=10, h=3, batch_size=20)
-	emb.setup_theano()
-	emb.init_weights()
-
-	"""
 	phrase = ['the', 'quick', 'brown', 'fox', 'jump']
 	score = emb.score(phrase, a)	# these words appear in windows.small
 	print "score for %s is %.3f" % (' '.join(phrase), score)
-	"""
-
-	emb.debug_train(W)
-	emb.train(W)
 
