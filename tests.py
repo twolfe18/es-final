@@ -73,7 +73,7 @@ class VanillaEmbeddingsTest:
 	
 		W = self.windows.get_phrase_matrix()
 		N, k = W.shape
-		ve = VanillaEmbeddings(len(self.alph), k, d=64, h=32)
+		ve = VanillaEmbeddings(len(self.alph), k, d=80, h=40, learning_rate_scale=0.5)
 		ve.init_weights(scale=100.0)
 		print 'W.shape =', W.shape
 
@@ -139,28 +139,17 @@ class VanillaEmbeddingsTest:
 			bad = ve.check_for_bad_params()
 
 		# take one grad setup with this batch size
-		def batch(size, verbose=False):
-			if verbose:
-				print 'taking a gradient step with', size, 'instances'
+		def batch(size):
 			r = rand.choice(N_train, size)
 			W = W_train[r,]
 			Z = Z_train[r,]
-			if verbose:
-				print 'subset =', r
-				print 'W[r,] =', W
-				print 'Z[r,] =', Z
 			ve.f_step(W, Z)
-			#ve.params['W'].update([W,Z], verbose=verbose)
-			#ve.params['A'].update([W,Z], verbose=verbose)
-			if verbose:
-				print
-				print
-				print
-				print
-				print
-				print
-				print
-				print
+
+		def dev_accuracy():
+			g = ve.raw_score(W_dev)
+			b = ve.raw_score(Z_dev)
+			right = (g > b).sum()
+			return (100.0 * right) / len(g)
 
 		print 'starting...'
 		sys.stdout.flush()
@@ -169,13 +158,10 @@ class VanillaEmbeddingsTest:
 		start = time.clock()
 		bs = 500
 		for i in range(5000):
-			#batch(bs, verbose=True)
 			for j in range(50):
 				batch(bs)
-			#batch(bs, verbose=True)
-			#show_params()
 			t = time.clock() - start
-			print i, t, 'dev.hinge =', ve.loss(W_dev, Z_dev, avg=False)
+			print i, t, 'dev.hinge =', ve.loss(W_dev, Z_dev, avg=False), 'accuracy =', dev_accuracy()
 			sys.stdout.flush()
 
 

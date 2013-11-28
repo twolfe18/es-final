@@ -113,12 +113,8 @@ class AdaGradParam:
 		""" cost should be a theano variable that this var should take gradients wrt
 			input_vars should be a list of variables for whic you'll provide values when you call update()
 		"""
-		debug = False
-
 		self.tvar = theano_mat	# should be a theano.shared
 		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type) * delta)
-		if debug:
-			print 'gg.type =', self.gg.type
 
 		# TODO upgrade to >=0.6rc5 and switch to float32s
 
@@ -129,32 +125,15 @@ class AdaGradParam:
 		self.lr = T.constant(learning_rate)
 
 		grad = theano.grad(cost=cost, wrt=self.tvar)
-		if debug: print 'grad.type =', grad.type
 
 		gg_update = self.gg + (grad ** 2)
 		tvar_update = self.tvar - self.lr * grad / (self.gg ** 0.5)
-		if debug:
-			print 'gg_update.type =', gg_update.type
-			print 'tvar_update.type =', tvar_update.type
 		self.updates = [(self.gg, gg_update), (self.tvar, tvar_update)]
-		print '[AdaGradParam __init__]', self.tvar.name, 'input_vars =', input_vars, type(input_vars)
 		self.f_update = theano.function(input_vars, grad, updates=self.updates)
-
-		if debug:
-			print 'f_update ='
-			theano.printing.debugprint(self.f_update.maker.fgraph.outputs[0])
-			print
 
 	def update(self, args, verbose=False):
 		""" args should match input_vars provided to __init__ """
-		if verbose:
-			print "[AdaGradParam update] args =", args
-			print "[AdaGradParam update] %s: before   = %s" % (self.name, self.tvar.get_value())
-		g = self.f_update(*args)
-		if verbose:
-			print "[AdaGradParam update] %s: gradient = %s" % (self.name, g)
-			print "[AdaGradParam update] %s: after    = %s" % (self.name, self.tvar.get_value())
-		return g
+		return self.f_update(*args)
 	
 	def __str__(self):
 		return "<AdaGradParam tvar.shape=%s lr=%g gg.l2=%g>" % \
@@ -179,13 +158,32 @@ class AdaGradParam:
 		inf = np.isinf(vals).any()
 		return nan or inf
 
+class AdaDeltaParam(AdaGradParam):
+	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-1, rho=0.90, delta=1e-3):
+		self.tvar = theano_mat	# should be a theano.shared
+		self.rho = T.constant(rho)
+		self.delta = T.constant(delta)
+		self.lr = T.constant(learning_rate)
+
+		grad = theano.grad(cost=cost, wrt=self.tvar)
+		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type) * delta)
+		self.ss = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type) * delta)
+		step = ((self.ss + self.delta) ** 0.5) / ((self.gg + self.delta) ** 0.5) * grad
+
+		gg_update = self.rho * self.gg + (1.0-self.rho) * (grad ** 2)
+		ss_update = self.rho * self.ss + (1.0-self.rho) * (step ** 2)
+		tvar_update = self.tvar - self.lr * step
+		self.updates = [(self.gg, gg_update), (self.ss, ss_update), (self.tvar, tvar_update)]
+		self.f_update = theano.function(input_vars, grad, updates=self.updates)
+
+
 class VanillaEmbeddings:
 	""" Try learning without E+N/V for now """
 	
 	# TODO need to have a dev set for reporting performance
 	# TODO needs to be able to read/write state
 
-	def __init__(self, num_words, k, d=64, h=40, batch_size=30):
+	def __init__(self, num_words, k, d=64, h=40, batch_size=30, learning_rate_scale=1.0):
 		assert k >= 3 and k % 2 == 1
 		assert num_words > k
 		self.d = d	# number of features per word
@@ -230,11 +228,11 @@ class VanillaEmbeddings:
 		args = [word_indices, word_indices_corrupted]
 		print 'args =', args
 		self.params = {
-			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=1.0),
-			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1),
-			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2),
-			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-3),
-			't' : AdaGradParam(self.t, args, avg_loss, learning_rate=1e-4) \
+			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=learning_rate_scale),
+			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1 * learning_rate_scale),
+			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
+			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
+			't' : AdaGradParam(self.t, args, avg_loss, learning_rate=1e-2 * learning_rate_scale) \
 		}
 
 		upd = [p.updates for p in self.params.values()]
