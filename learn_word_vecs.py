@@ -1,3 +1,4 @@
+import os
 import sys
 import math
 import time
@@ -12,13 +13,23 @@ float_type = 'float64'
 
 class Alphabet:
 
-	def __init__(self):
+	def __init__(self, filename=None):
 		self._by_key = {}
 		self._by_index = []
+		if filename is None: return
+		with codecs.open(filename, 'w', 'utf-8') as f:
+			for line in f:
+				line = line.strip()
+				ar = line.split()
+				key = ar[0]
+				i = int(ar[1])
+				assert i == len(self._by_key)
+				self._by_index.append(key)
+				self._by_key[key] = i
 
 	def lookup_index(self, key, add=False):
 		i = self._by_key.get(key)
-		if i:
+		if i is not None:
 			return i
 		elif add:
 			i = len(self._by_key)
@@ -28,8 +39,20 @@ class Alphabet:
 		else:
 			raise LookupError('there is no value associated with: ' + str(key))
 	
+	def save(self, filename):
+		with codecs.open(filename, 'w', 'utf-8') as f:
+			for i, key in enumerate(self._by_index):
+				f.write("%s\t%d\n" % (key, i))
+	
 	def __len__(self):
 		return len(self._by_index)
+
+	def __str__(self):
+		s = len(self)
+		if s < 10:
+			kvs = ', '.join([str(k) + ':' + str(v) for k, v in self._by_key.iteritems()])
+			return "<Alphabet %s>" % (kvs)
+		return "<Alphabet size=%d>" % (s)
 
 class NomlexReader:
 
@@ -48,6 +71,7 @@ class NomlexReader:
 		f.close()
 		print "[NomlexReader] reading pairs from %s took %.1f sec" % (self.filename, time.clock()-start)
 
+
 class WindowReader:
 
 	def __init__(self, filename, alph=None):
@@ -57,6 +81,7 @@ class WindowReader:
 		else:
 			self.word2idx = alph
 		self.phrase_mat = None
+		self.add_to_alph = True
 
 	def get_alphabet(self):
 		return self.word2idx
@@ -76,6 +101,28 @@ class WindowReader:
 		if self.phrase_mat is None:
 			self.phrase_mat = np.array(list(self.get_int_lines()))
 		return self.phrase_mat
+
+
+class MultiWindowReader:
+	
+	def __init__(self, files):
+		self.files = files
+		self.partition = 0
+		self.cache = None
+	
+	def set_partition(self, i):
+		if i == self.partition:
+			return
+		self.partition = i
+		self.cache = None
+
+	def get_phrase_matrix(self):
+		if self.cache is None:
+			f = self.files[self.partition]
+			wr = WindowReader(f)
+			self.cache = wr.get_phrase_matrix()
+		return self.cache
+
 
 class Regularizer:
 
@@ -107,7 +154,9 @@ class Regularizer:
 		return None
 
 class AdaGradParam:
-	""" only setup to do minimization """
+	""" only setup to do minimization
+		should look like a numpy array (forward calls to self.tvar)
+	"""
 
 	def __init__(self, theano_mat, input_vars, cost, learning_rate=1e-2, delta=1e-2):
 		""" cost should be a theano variable that this var should take gradients wrt
@@ -140,6 +189,9 @@ class AdaGradParam:
 			(self.tvar.get_value().shape, self.lr.value,
 			np.linalg.norm(self.gg.get_value(), ord=2))
 	
+	def get_value(self): return self.tvar.get_value()
+	def set_value(self, v): return self.tvar.set_value(v)
+
 	@property
 	def name(self): return self.tvar.name
 	@property
@@ -176,6 +228,29 @@ class AdaDeltaParam(AdaGradParam):
 		self.updates = [(self.gg, gg_update), (self.ss, ss_update), (self.tvar, tvar_update)]
 		self.f_update = theano.function(input_vars, grad, updates=self.updates)
 
+class NPZipper:
+	# TODO writeout metadata like when the files were serialized
+
+	@staticmethod
+	def save(params, directory):
+		""" params should be a dict with string keys and numpy array values """
+		assert os.path.isdir(directory)
+		for name, p in params.iteritems():
+			f = os.path.join(directory, name)
+			np.save(f, p)
+
+	@staticmethod
+	def load(directory):
+		""" returns a dict with string keys and numpy array values """
+		assert os.path.isdir(directory)
+		params = {}
+		for f in os.listdir(directory):
+			if f.endswith('.npy'):
+				name = f[:-4]
+				p = np.load(os.path.join(directory, f))
+				params[name] = p
+		return params
+		
 
 class VanillaEmbeddings:
 	""" Try learning without E+N/V for now """
@@ -183,13 +258,12 @@ class VanillaEmbeddings:
 	# TODO need to have a dev set for reporting performance
 	# TODO needs to be able to read/write state
 
-	def __init__(self, num_words, k, d=64, h=40, batch_size=30, learning_rate_scale=1.0):
-		assert k >= 3 and k % 2 == 1
-		assert num_words > k
+	def __init__(self, alph, k, d=64, h=40, batch_size=30, learning_rate_scale=1.0):
 		self.d = d	# number of features per word
 		self.h = h	# hidden layer size
 		self.k = k	# how many words in a window
-		self.num_words = num_words
+		self.alph = alph
+		self.num_words = len(alph)
 		self.batch_size = batch_size
 
 		# 1-hidden layer network
@@ -226,7 +300,7 @@ class VanillaEmbeddings:
 			avg_loss = loss.mean() + r
 
 		args = [word_indices, word_indices_corrupted]
-		print 'args =', args
+		#print 'args =', args
 		self.params = {
 			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=learning_rate_scale),
 			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1 * learning_rate_scale),
@@ -237,9 +311,10 @@ class VanillaEmbeddings:
 
 		upd = [p.updates for p in self.params.values()]
 		upd = list(itertools.chain(*upd))	# flatten list
-		print 'updates =', upd
+		#print 'updates =', upd
 		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
 
+	# TODO this is disused
 	def train(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
 		assert phrases.shape[1] == self.k
@@ -259,13 +334,15 @@ class VanillaEmbeddings:
 					print 'A.l2 =', self.params['A'].l2()
 
 	# user-friendly version
-	def score(self, words, alph):
+	def score(self, words):
 		""" gives the NNs score of this phrase
 			words should be a list of strings and alph and Alphabet containing those strings
 		"""
 		assert type(words) == list
-		w = [a.lookup_index(x, add=False) for x in words]
-		i = np.mat( np.array(w, dtype='int32') )
+		print '[score] words =', words
+		print '[score] self.alph = ', self.alph
+		w = [self.alph.lookup_index(x, add=False) for x in words]
+		i = np.mat( np.array(w, dtype=int_type) )
 		return self.f_score(i)[0]
 
 	def raw_score(self, phrases):
@@ -279,14 +356,6 @@ class VanillaEmbeddings:
 		assert phrases.shape == corrupted_phrases.shape
 		g = self.raw_score(phrases)
 		b = self.raw_score(corrupted_phrases)
-
-		debug = False
-		if debug:
-			print 'uncorrupted scores ='
-			print g[:100]
-			print 'corrupted scores ='
-			print b[:100]
-
 		one = np.ones_like(g)
 		hinge = one + b - g
 		hinge = hinge * (hinge > 0.0)
@@ -311,17 +380,24 @@ class VanillaEmbeddings:
 				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
 			theano_tensor.set_value(new_vals)
 
-		#set_rand_value(self.W, scale=1e-5*scale)
+		set_rand_value(self.W, scale=1e-5*scale)
 		set_unif_value(self.A, 1e-3*scale)
 		#set_rand_value(self.b, scale=1e-7*scale)
 		set_rand_value(self.p, scale=1e-2*scale)
 		#self.t.set_value(0.0)
 	
-	def read_weights(self, filename):
-		raise 'imlement me!'
+	def read_weights(self, outdir):
+		assert os.path.isdir(outdir)
+		for name, value in NPZipper.load(outdir).iteritems():
+			self.params[name].set_value(value)
 	
-	def write_weights(self, filename):
-		raise 'imlement me!'
+	def write_weights(self, outdir):
+		if not os.path.isdir(outdir):
+			assert not os.path.isfile(outdir)
+			os.mkdir(outdir)
+		np = {k:v.get_value() for k, v in self.params.iteritems()}
+		NPZipper.save(np, outdir)
+
 
 	def corrupt(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """

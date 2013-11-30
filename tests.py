@@ -63,7 +63,8 @@ class VanillaEmbeddingsTest:
 
 	def run(self):
 		self.alph = Alphabet()
-		self.windows = WindowReader('fake_data.txt', alph=self.alph)
+		#self.windows = WindowReader('fake_data.txt', alph=self.alph)
+		self.windows = WindowReader('windows.med', alph=self.alph)
 		if self.basic():
 			self.learn_fake_data()
 		else:
@@ -83,7 +84,7 @@ class VanillaEmbeddingsTest:
 
 		idx = list(range(N))
 		rand.shuffle(idx)
-		i = int(N * 0.8)
+		i = int(N * 0.85)
 		train_idx = idx[:i]
 		dev_idx = idx[i:]
 		
@@ -127,10 +128,6 @@ class VanillaEmbeddingsTest:
 
 
 
-
-
-
-
 		def show_params():
 			print 'W.l1 =', ve.params['W'].l1
 			print 'W.lInf =', ve.params['W'].lInf
@@ -156,16 +153,18 @@ class VanillaEmbeddingsTest:
 
 		show_params()
 		start = time.clock()
-		bs = 500
+		bs = 800
 		for i in range(5000):
-			for j in range(50):
+			j = 0
+			while j < 100:
+				j += 1
 				batch(bs)
 			t = time.clock() - start
 			print i, t, 'dev.hinge =', ve.loss(W_dev, Z_dev, avg=False), 'accuracy =', dev_accuracy()
 			sys.stdout.flush()
 
 
-		return False
+		return True
 
 	def learn_fake_data(self):
 		start = time.clock()
@@ -180,8 +179,49 @@ class VanillaEmbeddingsTest:
 		emb.train(W)
 
 
+class SerializationTest:
+	def run(self):
+		outdir = 'models/io-test'
+		p = ['the', 'quick', 'brown', 'fox', 'jump']
+		a = Alphabet()
+		for w in p: a.lookup_index(w, add=True)
+		print 'alph =', a
+		num_words = len(a)
+		k = len(p)
+
+		ve = VanillaEmbeddings(a, k)
+		ve.init_weights()
+		ve.write_weights(outdir)
+		s1 = ve.score(p)
+		print 'score of first model:', s1
+
+		ve2 = VanillaEmbeddings(a, k)
+		ve2.read_weights(outdir)
+		s2 = ve2.score(p)
+		print 'score of second model:', s2
+
+		return s1 == s2
+
+class ReservoirWindowReaderTests:
+	def run(self):
+		a = Alphabet()
+		filename = '~/Desktop/word-windows-5.txt'	# 21GB file!
+		size = 75000
+		wr = ReservoirWindowReader(filename, size, a)
+		x1 = wr.get_phrase_matrix()
+		n, k = x1.shape
+		if n != size: return False
+		if k != 5: return False
+
+		wr.rejuvinate()
+		x2 = wr.get_phrase_matrix()
+		if x1 == x2: return False
+
+		return True
+
+
 if __name__ == '__main__':
-	tests = {'adagrad': AdaGradParamTest(), 'vanilla': VanillaEmbeddingsTest()}
+	tests = { 'adagrad': AdaGradParamTest(), 'vanilla': VanillaEmbeddingsTest(), 'serialization': SerializationTest() }
 	names = tests.keys()
 	if len(sys.argv) > 1:
 		names = sys.argv[1:]
@@ -191,6 +231,7 @@ if __name__ == '__main__':
 			print 'no test named', name
 		else:
 			print "====================== Running %s test ======================" % (name)
-			t.run()
+			worked = t.run()
+			assert worked
 
 
