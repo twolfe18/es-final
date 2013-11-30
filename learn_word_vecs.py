@@ -2,6 +2,7 @@ import os
 import sys
 import math
 import time
+import codecs
 import itertools
 import numpy as np
 import theano
@@ -11,13 +12,13 @@ import theano.tensor as T
 int_type = 'int32'
 float_type = 'float64'
 
-class Alphabet:
+class Alphabet(object):
 
 	def __init__(self, filename=None):
 		self._by_key = {}
 		self._by_index = []
 		if filename is None: return
-		with codecs.open(filename, 'w', 'utf-8') as f:
+		with codecs.open(filename, 'r', 'utf-8') as f:
 			for line in f:
 				line = line.strip()
 				ar = line.split()
@@ -54,6 +55,30 @@ class Alphabet:
 			return "<Alphabet %s>" % (kvs)
 		return "<Alphabet size=%d>" % (s)
 
+class CountAlphabet(Alphabet, object):
+	def __init__(self):
+		self.counts = []
+		super(CountAlphabet, self).__init__()
+	def lookup_index(self, key, add=False):
+		i = super(CountAlphabet, self).lookup_index(key, add)
+		if i is not None:
+			if i >= len(self.counts):
+				self.counts.extend( [0] * (i - len(self.counts) + 1) )
+			self.counts[i] += 1
+		return i
+	def count(self, key):
+		#i = super(CountAlphabet, self).lookup_index(key, add)
+		i = self.lookup_index(key, add)
+		if i is None:
+			return 0
+		else:
+			return self.counts[i]
+	def high_count_keys(self, count):
+		#by_index = super(CountAlphabet, self)._by_index
+		for i, key in enumerate(self._by_index):
+			if self.counts[i] >= count:
+				yield key
+
 class NomlexReader:
 
 	def __init__(self, filename, alph):
@@ -74,27 +99,47 @@ class NomlexReader:
 
 class WindowReader:
 
-	def __init__(self, filename, alph=None):
+	def __init__(self, filename, alph=None, oov='<OOV>'):
+		""" if you give an OOV token, it will be swapped in for things in the alphabet
+			if you don't, then OOV tokens will be added to the alphabet
+		"""
 		self.filename = filename
+		self.oov = oov
 		if alph is None:
 			self.word2idx = Alphabet()
+			self.word2idx.lookup_index(oov, add=True)
 		else:
 			self.word2idx = alph
 		self.phrase_mat = None
-		self.add_to_alph = True
 
 	def get_alphabet(self):
 		return self.word2idx
 
 	def get_word_lines(self):
 		f = open(self.filename, 'r')
+		a = None
 		for line in f:
-			yield line.strip().split()
+			ar = line.strip().split()
+			if a is None:
+				a = len(ar)
+			else:
+				assert a == len(ar)
+			yield ar
 		f.close()
 
 	def get_int_lines(self):
 		for words in self.get_word_lines():
-			yield np.array([self.word2idx.lookup_index(w, add=True) for w in words], dtype=int_type)
+			if self.oov is None:
+				yield np.array([self.word2idx.lookup_index(w, add=True) for w in words], dtype=int_type)
+			else:
+				r = []
+				for t in words:
+					try:
+						i = self.word2idx.lookup_index(t, add=False)
+					except:
+						i = self.word2idx.lookup_index(self.oov, add=False)
+					r.append(i)
+				yield np.array(r, dtype=int_type)
 	
 	def get_phrase_matrix(self):
 		""" return a matrix where rows are phrases, should be ~5 columns, entries are ints taken from alph """
@@ -105,10 +150,11 @@ class WindowReader:
 
 class MultiWindowReader:
 	
-	def __init__(self, files):
+	def __init__(self, files, oov='<OOV>'):
 		self.files = files
 		self.partition = 0
 		self.cache = None
+		self.oov = oov
 	
 	def set_partition(self, i):
 		if i == self.partition:
@@ -119,9 +165,11 @@ class MultiWindowReader:
 	def get_phrase_matrix(self):
 		if self.cache is None:
 			f = self.files[self.partition]
-			wr = WindowReader(f)
+			wr = WindowReader(f, oov=self.oov)
 			self.cache = wr.get_phrase_matrix()
 		return self.cache
+	
+	def num_partitions(self): return len(self.files)
 
 
 class Regularizer:
@@ -315,7 +363,7 @@ class VanillaEmbeddings:
 		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
 
 	# TODO this is disused
-	def train(self, phrases):
+	def train(self, train_phrases, dev_phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
 		assert phrases.shape[1] == self.k
 		epochs = 100
