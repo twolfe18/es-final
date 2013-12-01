@@ -76,6 +76,7 @@ Preliminary Results
 
 
 TODO:
+- have a super class for embeddings models
 - switch from additive model to stacking model
 	- "subtracting off" now means only looking in the sem or syn parts of the stacked vector
 
