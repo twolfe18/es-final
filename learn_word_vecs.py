@@ -39,6 +39,9 @@ class Alphabet(object):
 			return i
 		else:
 			raise LookupError('there is no value associated with: ' + str(key))
+
+	def lookup_value(self, index):
+		return self._by_index[index]
 	
 	def save(self, filename):
 		with codecs.open(filename, 'w', 'utf-8') as f:
@@ -90,20 +93,52 @@ class NomlexReader:
 		f = open(self.filename, 'r')
 		for line in f:
 			nom, verb = line.strip().split()
-			n = self.word2idx.lookup_index(nom, add=True)
-			v = self.word2idx.lookup_index(verb, add=True)
-			yield np.array([n, v], dtype=int_type)
+			try:
+				n = self.word2idx.lookup_index(nom, add=False)
+				v = self.word2idx.lookup_index(verb, add=False)
+				yield np.array([n, v], dtype=int_type)
+			except:
+				pass
 		f.close()
 		print "[NomlexReader] reading pairs from %s took %.1f sec" % (self.filename, time.clock()-start)
 
+	def get_features(self, phrase_matrix):
+		""" pass in a numpy matrix of phrases """
+		# features:
+		# 0 for not in NOMLEX
+		# 1 for nom in NOMLEX
+		# 2 for verb in NOMLEX
+		N, k = phrase_matrix.shape
+		assert phrase_matrix.max() < len(self.word2idx)
+		feat_map = np.zeros(len(self.word2idx))
+		for ar in self.get_pairs():
+			nom = ar[0]
+			verb = ar[1]
+			assert feat_map[nom] == 0 or feat_map[nom] == 1, 'collision for ' + self.word2idx.lookup_value(nom)
+			assert feat_map[verb] == 0 or feat_map[verb] == 2, 'collision for ' + self.word2idx.lookup_value(verb)
+			print "[get_features] len(alph)=%d nom=%d verb=%d" % (len(self.word2idx), nom, verb)
+			feat_map[nom] = 1
+			feat_map[verb] = 2
+		features = feat_map[phrase_matrix]
+		assert features.shape == phrase_matrix.shape
+		return features
+
+	# i think i may need to rethink how i'm doing these nomlex pairs
+	# my previous idea was to have
+	# line[x] = "nom-word verb-word"
+	# replace all occurrences of "nom-word" with [word-x + nom]
+	# but this is ambiguous given that "nom-word may appear in NOMLEX more than once
 
 class WindowReader:
 
-	def __init__(self, filename, alph=None, oov='<OOV>'):
+	def __init__(self, filename, window_size, alph=None, oov='<OOV>'):
 		""" if you give an OOV token, it will be swapped in for things in the alphabet
 			if you don't, then OOV tokens will be added to the alphabet
 		"""
 		self.filename = filename
+		self.window_size = window_size
+		assert type(window_size) == int
+		assert os.path.isfile(filename)
 		self.oov = oov
 		if alph is None:
 			self.word2idx = Alphabet()
@@ -116,30 +151,38 @@ class WindowReader:
 		return self.word2idx
 
 	def get_word_lines(self):
+		skipped = 0
+		total = 0
+		sizes = set()
 		f = open(self.filename, 'r')
-		a = None
 		for line in f:
 			ar = line.strip().split()
-			if a is None:
-				a = len(ar)
+			if len(ar) == self.window_size:
+				yield ar
 			else:
-				assert a == len(ar)
-			yield ar
+				skipped += 1
+				sizes.add(len(ar))
+			total += 1
 		f.close()
+		print "[get_word_lines] skipped %d of %d lines in %s" % (skipped, total, self.filename)
+		if skipped > 0:
+			print "[get_word_lines] sizes of skipped =", sizes
+			print "[get_word_lines] self.window_size =", self.window_size
+			assert False
 
 	def get_int_lines(self):
 		for words in self.get_word_lines():
 			if self.oov is None:
 				yield np.array([self.word2idx.lookup_index(w, add=True) for w in words], dtype=int_type)
 			else:
-				r = []
-				for t in words:
+				r = np.zeros(self.window_size, dtype=int_type)
+				for idx, t in enumerate(words):
 					try:
 						i = self.word2idx.lookup_index(t, add=False)
 					except:
 						i = self.word2idx.lookup_index(self.oov, add=False)
-					r.append(i)
-				yield np.array(r, dtype=int_type)
+					r[idx] = i
+				yield r
 	
 	def get_phrase_matrix(self):
 		""" return a matrix where rows are phrases, should be ~5 columns, entries are ints taken from alph """
@@ -330,7 +373,10 @@ class VanillaEmbeddings:
 		self.p = theano.shared(np.zeros(self.h, dtype=float_type), name='p')					# hidden => output
 		self.t = theano.shared(0.0, name='t')													# output offset
 
-		word_indices = T.imatrix('word_indices')	# each row is a phrase, should have self.k columns
+		if int_type == 'int64':
+			word_indices = T.lmatrix('word_indices')
+		else:
+			word_indices = T.imatrix('word_indices')	# each row is a phrase, should have self.k columns
 		n, k = word_indices.shape	# won't know this until runtime
 		phrases_tensor = self.W[word_indices]	# shape=(n, k, self.d)
 		phrases = phrases_tensor.reshape((n, k * self.d))
@@ -378,24 +424,32 @@ class VanillaEmbeddings:
 		assert dev_phrases.shape[1] == self.k
 		N_train, k = train_phrases.shape
 		assert k == self.k
+		print '[train] self.k =', self.k
 		train_phrases_corrupted = self.corrupt(train_phrases)
 		dev_phrases_corrupted = self.corrupt(dev_phrases)
 		dev_loss = []
-		#dev_loss_avg = 1.0
-		#dev_loss_avg_decay = 0.5
 		for e in range(epochs):
 			print "starting epoch %d" % (e)
 
 			# take a few steps
+			t = time.clock()
 			for i in range(iterations):
 				batch = np.random.choice(N_train, batch_size)
 				self.f_step(train_phrases[batch,], train_phrases_corrupted[batch,])
+			t_time = time.clock() - t
 
 			# compute dev loss
+			t = time.clock()
 			l = self.loss(dev_phrases, dev_phrases_corrupted)
 			dev_loss.append(l)
 			print "[train] loss on %d examples is %.5f" % (dev_phrases.shape[0], l)
-			#dev_loss_avg = (1.0-dev_loss_avg_decay) * dev_loss_avg + dev_loss_avg_decay * l
+			d_time = time.clock() - t
+			print "[train] train took %.2f sec and dev took %.2f" % (t_time, d_time)
+
+			ex = iterations * batch_size + dev_phrases.shape[0]
+			ex_per_sec = ex / (t_time + d_time)
+			print "[train] %.1f examples per second" % (ex_per_sec)
+
 		return dev_loss
 
 
@@ -420,6 +474,8 @@ class VanillaEmbeddings:
 	def loss(self, phrases, corrupted_phrases, avg=True):
 		""" returns the hinge loss on this data """
 		assert phrases.shape == corrupted_phrases.shape
+		N, k = phrases.shape
+		assert k == self.k
 		g = self.raw_score(phrases)
 		b = self.raw_score(corrupted_phrases)
 		one = np.ones_like(g)
@@ -452,9 +508,11 @@ class VanillaEmbeddings:
 		set_rand_value(self.p, scale=1e-2*scale)
 		#self.t.set_value(0.0)
 	
-	def read_weights(self, outdir):
-		assert os.path.isdir(outdir)
-		for name, value in NPZipper.load(outdir).iteritems():
+	def read_weights(self, fromdir):
+		assert os.path.isdir(fromdir)
+		a = Alphabet(os.path.join(fromdir, 'alphabet.txt'))
+		self.__init__(a, self.k, self.d, self.h, self.batch_size)
+		for name, value in NPZipper.load(fromdir).iteritems():
 			self.params[name].set_value(value)
 	
 	def write_weights(self, outdir):
@@ -464,7 +522,7 @@ class VanillaEmbeddings:
 		print '[write_weights] writing model to', outdir
 		np = {k:v.get_value() for k, v in self.params.iteritems()}
 		NPZipper.save(np, outdir)
-
+		self.alph.save(os.path.join(outdir, 'alphabet.txt'))
 
 	def corrupt(self, phrases):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """

@@ -108,9 +108,15 @@ if __name__ == '__main__':
 	output_dir = 'data/split-for-testing/'
 	lines_per_file = 200000
 
+	input_file = '/home/travis/Desktop/word-windows-5.40m.txt'
+	output_dir = 'data/jumbo-test/'
+	lines_per_file = 10000000
+
 	input_file = '/home/travis/Desktop/word-windows-5.txt'
 	output_dir = 'data/jumbo/'
-	lines_per_file = 5000000
+	lines_per_file = 10000000
+
+	k = 5
 
 	# split into managable text files
 	splitter = Splitter()
@@ -118,7 +124,7 @@ if __name__ == '__main__':
 	print '[main] splitter returned', files
 
 	# normalize text (inplace)
-	norm = Normalizer(arity=5)
+	norm = Normalizer(arity=k)
 	_, tempfile = tempfile.mkstemp()
 	for f in files:
 		norm.normalize(f, tempfile)
@@ -132,17 +138,16 @@ if __name__ == '__main__':
 	train = files[2:]
 	print 'train =', train
 	print 'dev   =', dev
-	print 'tet   =', test
-	
+	print 'test   =', test
 
 	def compress_and_rename(input_file, alph, output_file):
 		print "[compress_and_rename] %s => %s len(alph)=%d" % (input_file, output_file, len(alph))
 		if output_file is None:
 			# count
-			wr = WindowReader(input_file, alph, oov=None)
+			wr = WindowReader(input_file, k, alph, oov=None)
 		else:
 			# get real phrases (with OOVs)
-			wr = WindowReader(input_file, alph, oov='<OOV>')
+			wr = WindowReader(input_file, k, alph, oov='<OOV>')
 
 		# numpy format
 		phrases = wr.get_phrase_matrix()
@@ -153,16 +158,20 @@ if __name__ == '__main__':
 	# count
 	a = CountAlphabet()
 	for f in [dev] + train:
-		compress_and_rename(dev, a, None)
+		compress_and_rename(f, a, None)
 
 	# prune
+	prune_thresh = 100
 	a_pruned = Alphabet()
 	a_pruned.lookup_index('<OOV>', add=True)
-	for key in a.high_count_keys(10):
+	for key in a.high_count_keys(prune_thresh):
 		a_pruned.lookup_index(key, add=True)
 	print "[main] pruned original alphabet (size=%d) to exclude words that appeared fewer than %d times (size=%d)" % \
-		(len(a), 10, len(a_pruned))
+		(len(a), prune_thresh, len(a_pruned))
 	a = a_pruned
+	a_path = os.path.join(output_dir, 'train-dev.alphabet')
+	print '[main] saving alphabet to', a_path
+	a.save(a_path)
 
 	# go over text again, only convert what pruned tokens
 	compress_and_rename(test, a, os.path.join(output_dir, 'test.npy'))
@@ -170,17 +179,18 @@ if __name__ == '__main__':
 	for i, f in enumerate(train):
 		compress_and_rename(f, a, os.path.join(output_dir, 'train'+str(i)+'.npy'))
 
-	# save the alphabet
-	a_path = os.path.join(output_dir, 'train-dev.alphabet')
-	print '[main] saving alphabet to', a_path
-	a.save(a_path)
+
+	# dev set doesn't need to be so big
+	d = np.load(os.path.join(output_dir, 'dev.npy'))
+	np.save(os.path.join(output_dir, 'dev.small.npy'), d[0:200000,])
+
 
 	# tests
 	a2 = Alphabet(a_path)
 	print a._by_key == a2._by_key
 
 	W1 = np.load(os.path.join(output_dir, 'dev.npy'))
-	W2 = WindowReader(dev, a).get_phrase_matrix()
+	W2 = WindowReader(dev, k, a).get_phrase_matrix()
 
 	print W1
 	print W2

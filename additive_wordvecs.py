@@ -108,7 +108,12 @@ class AdditiveWordVecs:
 		assert phrase.max() < self.num_words
 		pass
 	
+	def train(self, phrase, features):
+		print 'can\'t do this yet!'
+		assert False
+
 	def corrupt(self, phrase, features):
+		""" returns a tuple of matrices: (phrases_corrupted, features_corrupted) """
 		# how to corrupt?
 		# lets never propose mis-matched (word,feature) pairs
 		# we can take this as a statement that we are learning a conditional distribution
@@ -130,7 +135,7 @@ class AdditiveWordVecs:
 			if c == 'phrase' or c == 'both':
 				c_features[i, mid] = np.random.randint(0, self.num_features-1)
 
-		return c_phrase, c_features
+		return (c_phrase, c_features)
 
 
 
