@@ -1,6 +1,7 @@
 import theano
 import theano.tensor as T
 import numpy as np
+from learn_word_vecs import *
 
 float_type = 'float64'
 
@@ -8,27 +9,21 @@ float_type = 'float64'
 # for words that appear in NOMLEX, I plan to decompose them a vector for their
 # base meaning plus a vector for whether they are in nominal or verbal form
 
-class WFCorruptionPolicy
+class WFCorruptionPolicy:
+
 	def __init__(self, prob_just_word=0.5, prob_just_feature=0.4, prob_both=0.1):
 		z = prob_just_word + prob_just_feature + prob_both
 		self.prob_just_word = prob_just_word / z
 		self.prob_just_feature = prob_just_feature / z
 		self.prob_both = prob_both / z
 
-	@property
-	def prob_just_word(self): return self.prob_just_word
-	@property
-	def prob_just_feature(self): return self.prob_just_feature
-	@property
-	def prob_both(self): return self.prob_both
-
-	def what_to_corrupt():
+	def what_to_corrupt(self):
 		i = np.random.rand()
 		if i < self.prob_just_word:
 			return 'word'
 		elif i < self.prob_just_word + self.prob_just_feature:
 			return 'feature'
-		else
+		else:
 			return 'both'
 
 class AdditiveWordVecs:
@@ -45,12 +40,11 @@ class AdditiveWordVecs:
 		self.alph = alph
 		self.num_features = num_features
 		self.num_words = len(alph)
-		self.batch_size = batch_size
 		self.corruptor = WFCorruptionPolicy()
 
 		# 1-hidden layer network
 		self.Ew = theano.shared(np.zeros((self.num_words, self.d), dtype=float_type), name='Ew')	# word embeddings
-		self.Ef = theano.shared(np.zeros((self.num_features, self.d), dytpe=float_type), name='Ef')	# feature embeddings
+		self.Ef = theano.shared(np.zeros((self.num_features, self.d), dtype=float_type), name='Ef')	# feature embeddings
 		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype=float_type), name='A')	# word+feat => hidden
 		self.b = theano.shared(np.zeros(self.h, dtype=float_type), name='b')					# hidden offset
 		self.p = theano.shared(np.zeros(self.h, dtype=float_type), name='p')					# hidden => output
@@ -79,9 +73,9 @@ class AdditiveWordVecs:
 		})
 		loss_neg = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_neg * (loss_neg > 0)
-		r = self.reg.regularization_var()
 		avg_loss = loss.mean()
 
+		learning_rate_scale = 1.0
 		args = [word_indices, feat_indices, word_indices_corrupted, feat_indices_corrupted]
 		print 'args =', args
 		self.params = {
@@ -96,7 +90,21 @@ class AdditiveWordVecs:
 		upd = [p.updates for p in self.params.values()]
 		upd = list(itertools.chain(*upd))	# flatten list
 		#print 'updates =', upd
-		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
+		self.f_step = theano.function(args, [avg_loss], updates=upd)
+
+		self.params['p'].set_value(np.random.rand(h) * 1e-2)
+		self.params['A'].set_value(\
+			np.random.rand(self.k * self.d * self.h)\
+			.reshape( (self.k * self.d, self.h) )\
+			*1e-3)
+		self.params['Ew'].set_value(\
+			np.random.rand(self.num_words * self.d)\
+			.reshape( (self.num_words, self.d) )\
+			*1e-5)
+		self.params['Ef'].set_value(\
+			np.random.rand(self.num_features * self.d)\
+			.reshape( (self.num_features, self.d) )\
+			*1e-5)
 	
 	def raw_score(self, phrase, features):
 		""" phrase is a vector of word indices with length self.k
@@ -106,11 +114,39 @@ class AdditiveWordVecs:
 		"""
 		assert features.max() < self.num_features
 		assert phrase.max() < self.num_words
-		pass
+		return self.f_score(phrase, features)[0]
 	
-	def train(self, phrase, features):
-		print 'can\'t do this yet!'
-		assert False
+	def train(self, train_phrase, dev_phrase, train_features, dev_features):
+		batch_size = 500
+		N_train, k = train_phrase.shape
+		assert self.k == k
+
+		c_train_phrase, c_train_features = self.corrupt(train_phrase, train_features)
+		c_dev_phrase, c_dev_features = self.corrupt(dev_phrase, dev_features)
+
+		for i in range(30):
+			batch = np.random.choice(N_train, batch_size)
+			self.f_step(train_phrase[batch,], train_features[batch,], \
+				c_train_phrase[batch,], c_train_features[batch,])
+
+		l = self.loss(dev_phrase, dev_features, c_dev_phrase, c_dev_features)
+		print '[train] loss =', l
+
+	def loss(self, phrases, features, corrupted_phrases, corrupted_features, avg=True):
+		""" returns the hinge loss on this data """
+		assert phrases.shape == corrupted_phrases.shape
+		assert features.shape == corrupted_features.shape
+		N, k = phrases.shape
+		assert k == self.k
+		g = self.raw_score(phrases, features)
+		b = self.raw_score(corrupted_phrases, corrupted_features)
+		one = np.ones_like(g)
+		hinge = one + b - g
+		hinge = hinge * (hinge > 0.0)
+		if avg:
+			return hinge.mean()
+		else:
+			return hinge.sum()
 
 	def corrupt(self, phrase, features):
 		""" returns a tuple of matrices: (phrases_corrupted, features_corrupted) """
@@ -136,14 +172,6 @@ class AdditiveWordVecs:
 				c_features[i, mid] = np.random.randint(0, self.num_features-1)
 
 		return (c_phrase, c_features)
-
-
-
-
-
-
-
-
 
 
 

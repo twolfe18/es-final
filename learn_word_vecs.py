@@ -88,19 +88,35 @@ class NomlexReader:
 		self.word2idx = alph
 		self.filename = filename
 
-	def get_pairs(self):
+	def get_int_pairs(self, take_from=None):
+		if take_from is None:
+			take_from = self.get_uniq_word_pairs
 		start = time.clock()
-		f = open(self.filename, 'r')
-		for line in f:
-			nom, verb = line.strip().split()
+		for nom, verb in take_from():
 			try:
 				n = self.word2idx.lookup_index(nom, add=False)
 				v = self.word2idx.lookup_index(verb, add=False)
-				yield np.array([n, v], dtype=int_type)
+				yield (n, v)
 			except:
 				pass
-		f.close()
 		print "[NomlexReader] reading pairs from %s took %.1f sec" % (self.filename, time.clock()-start)
+
+	def get_word_pairs(self):
+		f = open(self.filename, 'r')
+		for line in f:
+			nom, verb = line.strip().split()
+			yield (nom, verb)
+		f.close()
+	
+	def get_uniq_word_pairs(self):
+		""" if we see a word used more than once, we'll only take the first occurrence """
+		seen = set()
+		for nom, verb in self.get_word_pairs():
+			if nom in seen: continue
+			if verb in seen: continue
+			seen.add(nom)
+			seen.add(verb)
+			yield (nom, verb)
 
 	def get_features(self, phrase_matrix):
 		""" pass in a numpy matrix of phrases """
@@ -110,13 +126,11 @@ class NomlexReader:
 		# 2 for verb in NOMLEX
 		N, k = phrase_matrix.shape
 		assert phrase_matrix.max() < len(self.word2idx)
-		feat_map = np.zeros(len(self.word2idx))
-		for ar in self.get_pairs():
-			nom = ar[0]
-			verb = ar[1]
+		feat_map = np.zeros(len(self.word2idx), dtype=int_type)
+		for nom, verb in self.get_int_pairs(take_from=self.get_uniq_word_pairs):
 			assert feat_map[nom] == 0 or feat_map[nom] == 1, 'collision for ' + self.word2idx.lookup_value(nom)
 			assert feat_map[verb] == 0 or feat_map[verb] == 2, 'collision for ' + self.word2idx.lookup_value(verb)
-			print "[get_features] len(alph)=%d nom=%d verb=%d" % (len(self.word2idx), nom, verb)
+			#print "[get_features] len(alph)=%d nom=%d verb=%d" % (len(self.word2idx), nom, verb)
 			feat_map[nom] = 1
 			feat_map[verb] = 2
 		features = feat_map[phrase_matrix]
@@ -128,6 +142,10 @@ class NomlexReader:
 	# line[x] = "nom-word verb-word"
 	# replace all occurrences of "nom-word" with [word-x + nom]
 	# but this is ambiguous given that "nom-word may appear in NOMLEX more than once
+
+	# option 1: break ties
+	# option 2: bipartite graphs?
+	# option 3: remove duplicated words
 
 class WindowReader:
 

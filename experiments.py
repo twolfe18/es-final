@@ -1,5 +1,6 @@
 
 from learn_word_vecs import *
+from additive_wordvecs import *
 import numpy as np
 import numpy.random as rand
 import sys
@@ -70,17 +71,25 @@ class AdditiveTrainer:
 		# call train
 		
 		data_dir = 'data/jumbo-test/'
+		model_dir = 'models/additive-test/'
 		assert os.path.isdir(data_dir)
+		k = 5
 
 		alph = Alphabet(os.path.join(data_dir, 'train-dev.alphabet'))
-		phrases = np.load(os.path.join(data_dir, 'train0.npy'))
+		train_phrases = np.load(os.path.join(data_dir, 'train0.npy'))
+		dev_phrases = np.load(os.path.join(data_dir, 'dev.small.npy'))
 
 		nomlex = NomlexReader('data/nomlex.txt', alph)
-		features = nomlex.get_features(phrases)
+		train_features = nomlex.get_features(train_phrases)
+		dev_features = nomlex.get_features(dev_phrases)
 
-		print 'phrases =', phrases[0:10,]
-		print 'features =', features[0:10,]
+		# about 4.2% last time i checked
+		prop_feat = (train_features > 0).sum() / float(len(train_features) * len(train_features[0]))
+		print "[AdditiveTrainer] have features for %.1f%% of words in windows" % (100.0*prop_feat)
 
+		av = AdditiveWordVecs(alph, 3, k)
+		for i in range(100):
+			av.train(train_phrases, dev_phrases, train_features, dev_features)
 
 
 if __name__ == '__main__':
