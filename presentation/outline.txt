@@ -1,0 +1,86 @@
+
+What are we talking about?
+- learning word features on fully un-annotated data with a simple model
+- this is attractive because annotation is finite, unannotated text is practically infinite
+	- it is an open (machine learning) question whether or not we can train models of the precise
+	  linguistic phenomenon that we want to model with a *reasonable* sized annotated dataset
+	- it is an open (linguistic) question of whether our theories of language
+	  are consistent with the internal proceses of human language understanding
+- TODO come up with a citation
+
+
+Why might this work?
+- this is a task that humans *can* do (so arguably a machine that understands language should be able too)
+- understanding whether something is coherent requires deep understanding
+	- try going to an advanced quantum physics lecture and tell me if the lecturer is an imposter
+
+
+What has been done so far?
+- early results indicate that neural language models capture very fine grained semantic information
+	- vec("king") − vec("man") + vec("woman") is close to vec("queen"), Mikolov et al. 2013
+	- categories of nominals cluster together, Al Rfou 2013
+- but...
+	0	quickly	0.0
+	1	slowly	1.36467
+	2	gradually	1.63213
+	3	swiftly	1.82934
+	4	successfully	2.11207
+	5	rapidly	2.26706
+	6	abruptly	2.29526
+	7	constantly	2.39417
+	8	repeatedly	2.44148
+	9	temporarily	2.60622
+	10	regularly	2.62996
+	# speed?
+
+	0	death	0.0
+	1	war	5.59869
+	2	battle	5.6885
+	3	birth	5.89113
+	4	life	6.03676
+	5	murder	6.05203
+	6	command	6.12564
+	7	possession	6.23762
+	8	miscarriage	6.35067
+	9	divorce	6.35348
+	10	dream	6.47781
+	# die?
+
+	0	die	0.0
+	1	fill	6.91454
+	2	curl	6.93669
+	3	fly	6.99096
+	4	tap	7.00522
+	5	float	7.23434
+	6	count	7.25359
+	7	stem	7.25875
+	8	shine	7.39003
+	9	punch	7.47379
+	10	sit	7.53841
+	# deceased?
+
+	similarity closely follows syntactic category
+	this is not distance in "concept space", this is distance in word-window space!
+
+
+What questions do I want to answer?
+- can we learn representations for words that account for syntax and ``concepts" separately
+	- to help learning?
+	- to get a syntactically-uncorrupted notion of similarity? possibly event-based (we are looking at nom-verb similarity)?
+
+
+Preliminary Results
+- TODO learning curves for vanilla vs C+N/V model
+- TODO nearest words for vanilla vs C+N/V model
+- upcoming: can we generalize NOMLEX and learn new (nom,verb) pairs (see ideas9.txt)
+
+
+TODO:
+- switch from additive model to stacking model
+	- "subtracting off" now means only looking in the sem or syn parts of the stacked vector
+
+
+STACK:
+- Skeletonization: a technique for trimming the fat from a network via relevance assessment. Mozer and Smolensky
+
+
