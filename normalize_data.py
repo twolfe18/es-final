@@ -108,9 +108,9 @@ if __name__ == '__main__':
 	output_dir = 'data/split-for-testing/'
 	lines_per_file = 200000
 
-	#input_file = '/home/travis/Desktop/word-windows-5.txt'
-	#output_dir = 'data/jumbo/'
-	#lines_per_file = 5000000
+	input_file = '/home/travis/Desktop/word-windows-5.txt'
+	output_dir = 'data/jumbo/'
+	lines_per_file = 5000000
 
 	# split into managable text files
 	splitter = Splitter()

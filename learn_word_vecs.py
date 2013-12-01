@@ -147,6 +147,15 @@ class WindowReader:
 			self.phrase_mat = np.array(list(self.get_int_lines()))
 		return self.phrase_mat
 
+class NumpyWindowReader:
+	def __init__(self, filename):
+		self.filename = filename
+		self.cache = None
+	
+	def get_phrase_matrix(self):
+		if self.cache is None:
+			self.cache = np.load(self.filename)
+		return self.cache
 
 class MultiWindowReader:
 	
@@ -319,7 +328,7 @@ class VanillaEmbeddings:
 		self.A = theano.shared(np.zeros((self.k * self.d, self.h), dtype=float_type), name='A')	# word vecs => hidden
 		self.b = theano.shared(np.zeros(self.h, dtype=float_type), name='b')					# hidden offset
 		self.p = theano.shared(np.zeros(self.h, dtype=float_type), name='p')					# hidden => output
-		self.t = theano.shared(0.0, name='t')
+		self.t = theano.shared(0.0, name='t')													# output offset
 
 		word_indices = T.imatrix('word_indices')	# each row is a phrase, should have self.k columns
 		n, k = word_indices.shape	# won't know this until runtime
@@ -362,24 +371,33 @@ class VanillaEmbeddings:
 		#print 'updates =', upd
 		self.f_step = theano.function([word_indices, word_indices_corrupted], [avg_loss], updates=upd)
 
-	# TODO this is disused
-	def train(self, train_phrases, dev_phrases):
+
+	def train(self, train_phrases, dev_phrases, epochs=10, iterations=30, batch_size=500):
 		""" phrases should be a matrix of word indices, rows are phrases, should have self.k columns """
-		assert phrases.shape[1] == self.k
-		epochs = 100
-		N = len(phrases)
-		phrases_corrupted = self.corrupt(phrases)
+		assert train_phrases.shape[1] == self.k
+		assert dev_phrases.shape[1] == self.k
+		N_train, k = train_phrases.shape
+		assert k == self.k
+		train_phrases_corrupted = self.corrupt(train_phrases)
+		dev_phrases_corrupted = self.corrupt(dev_phrases)
+		dev_loss = []
+		#dev_loss_avg = 1.0
+		#dev_loss_avg_decay = 0.5
 		for e in range(epochs):
 			print "starting epoch %d" % (e)
-			for i in range(0, N, self.batch_size):
-				j = min(i + self.batch_size, N)
-				avg_loss = self.f_step(phrases[i:j,], phrases_corrupted[i:j,])[0]
-				if np.random.randint(100) == 0:
-					print "e=%d i=%d avg_loss=%.5g" % (e, i, avg_loss)
-					print 'W.l1 =', self.params['W'].l1()
-					print 'W.l2 =', self.params['W'].l2()
-					print 'A.l1 =', self.params['A'].l1()
-					print 'A.l2 =', self.params['A'].l2()
+
+			# take a few steps
+			for i in range(iterations):
+				batch = np.random.choice(N_train, batch_size)
+				self.f_step(train_phrases[batch,], train_phrases_corrupted[batch,])
+
+			# compute dev loss
+			l = self.loss(dev_phrases, dev_phrases_corrupted)
+			dev_loss.append(l)
+			print "[train] loss on %d examples is %.5f" % (dev_phrases.shape[0], l)
+			#dev_loss_avg = (1.0-dev_loss_avg_decay) * dev_loss_avg + dev_loss_avg_decay * l
+		return dev_loss
+
 
 	# user-friendly version
 	def score(self, words):
@@ -443,6 +461,7 @@ class VanillaEmbeddings:
 		if not os.path.isdir(outdir):
 			assert not os.path.isfile(outdir)
 			os.mkdir(outdir)
+		print '[write_weights] writing model to', outdir
 		np = {k:v.get_value() for k, v in self.params.iteritems()}
 		NPZipper.save(np, outdir)
 
