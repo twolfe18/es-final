@@ -55,7 +55,7 @@ class Trainer(object):
 				print 'losses =', losses
 				avg_loss = sum(losses) / len(losses)
 				if avg_loss < prev_avg_loss - 1e-4 or avg_loss / prev_avg_loss < 0.99:
-					if epoch % 10 == 0 or (epock > 50 and epoch % 5 == 0) or (epoch > 100):
+					if epoch % 10 == 0 or (epoch > 50 and epoch % 5 == 0) or (epoch > 100):
 						emb.write_weights(self.model_dir + 'epoch' + str(epoch))
 					improvement = True
 					prev_avg_loss = avg_loss
