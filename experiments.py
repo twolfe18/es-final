@@ -10,15 +10,15 @@ class VanillaTrainer:
 
 	def run(self):
 
-		model_dir = 'models/vanilla-testing/'
-		data_dir = 'data/split-for-testing/'
-		#model_dir = 'models/vanilla/'
-		#data_dir = 'data/jumbo-test/'
+		#model_dir = 'models/vanilla-testing/'
+		#data_dir = 'data/split-for-testing/'
+		model_dir = 'models/vanilla/'
+		data_dir = 'data/jumbo/'
 		k = 5
 
 		a = Alphabet(os.path.join(data_dir, 'train-dev.alphabet'))
 		print 'alphbet contains', len(a), 'words'
-		ve = VanillaEmbedding(a, k)
+		ve = VanillaEmbedding(a, k, learning_rate_scale=5.0)
 
 		dev_file = os.path.join(data_dir, 'dev.small.npy')
 		assert os.path.isfile(dev_file)
@@ -43,12 +43,12 @@ class VanillaTrainer:
 			for r in train_readers:
 				W_train = VanillaPhrase(r.get_phrase_matrix())
 				print 'file', r.filename, '...training...'
-				losses = ve.train(W_train, W_dev, epochs=6, iterations=300, batch_size=300)
+				losses = ve.train(W_train, W_dev, epochs=6, iterations=30, batch_size=500)
 				print 'losses =', losses
 				avg_loss = sum(losses) / len(losses)
 				if avg_loss < prev_avg_loss - 1e-4 or avg_loss / prev_avg_loss < 0.99:
-					d = model_dir + 'epoch' + str(epoch)
-					ve.write_weights(d)
+					if e % 10 == 0 or (e > 50 and e % 4 == 0) or (e > 100):
+						ve.write_weights(model_dir + 'epoch' + str(epoch))
 					improvement = True
 					prev_avg_loss = avg_loss
 					break

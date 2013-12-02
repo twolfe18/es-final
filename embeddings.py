@@ -113,9 +113,9 @@ class Embedding(object):
 			ex = iterations * batch_size + len(dev_phrases)
 			ex_per_sec = ex / (t_time + d_time)
 			print "[train] %.1f examples per second" % (ex_per_sec)
-			print '[train] W.l2 = ', self.params['W'].l2
-			print '[train] A.l2 = ', self.params['A'].l2
-			print
+			#print '[train] W.l2 = ', self.params['W'].l2	# this is actually noticeably slow
+			#print '[train] A.l2 = ', self.params['A'].l2
+			#print
 
 		return dev_loss
 
