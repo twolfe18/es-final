@@ -8,6 +8,26 @@ import numpy as np
 import theano
 import theano.tensor as T
 
+
+class Initializer:
+
+	@staticmethod
+	def set_rand_value(theano_tensor, scale=1.0):
+		old_vals = theano_tensor.get_value()
+		new_vals = (np.random.rand(*old_vals.shape) - 0.5) * scale
+		if(old_vals.dtype != new_vals.dtype):
+			new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
+		theano_tensor.set_value(new_vals)
+
+	@staticmethod
+	def set_unif_value(theano_tensor, value):
+		old_vals = theano_tensor.get_value()
+		new_vals = np.tile(value, old_vals.shape)
+		if(old_vals.dtype != new_vals.dtype):
+			new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
+		theano_tensor.set_value(new_vals)
+
+
 class Alphabet(object):
 
 	def __init__(self, filename=None):
@@ -122,7 +142,7 @@ class NomlexReader:
 		# 2 for verb in NOMLEX
 		N, k = phrase_matrix.shape
 		assert phrase_matrix.max() < len(self.word2idx)
-		feat_map = np.zeros(len(self.word2idx), dtype=int_type)
+		feat_map = np.zeros(len(self.word2idx), dtype=phrase_matrix.dtype)
 		for nom, verb in self.get_int_pairs(take_from=self.get_uniq_word_pairs):
 			assert feat_map[nom] == 0 or feat_map[nom] == 1, 'collision for ' + self.word2idx.lookup_value(nom)
 			assert feat_map[verb] == 0 or feat_map[verb] == 2, 'collision for ' + self.word2idx.lookup_value(verb)

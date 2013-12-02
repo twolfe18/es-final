@@ -13,6 +13,101 @@ from util import *
 int_type = 'int32'
 float_type = 'float64'
 
+
+class Phrase(object):
+	""" represents a phrase (word window), or many of them """
+
+	def as_args_list(self):
+		""" returns a list of argument values supplied by this object """
+		raise 'subclasses need to implement this'
+	
+	def new_batch(self, size):
+		""" sets a different batch (internally) """
+		raise 'subclasses need to implement this'
+
+	def __len__(self):
+		""" how many examples are in this phrase
+			represents the total, not the batch size
+		"""
+		raise 'subclasses need to implement this'
+
+	def __str__(self):
+		return "<Phrase shape=(%d,%d)>" % (len(self), self.width)
+	
+	@property
+	def width(self):
+		""" how many words are in one of this/these phrase(s) ? """
+		raise 'subclasses need to implement this'
+
+	@property
+	def shape(self):
+		return (len(self), self.width)
+
+
+class FeaturizedPhrase(Phrase):
+
+	def __init__(self, word_indices, feature_indices):
+		assert word_indices.shape == feature_indices.shape
+		assert len(word_indices.shape) == 2
+		assert len(feature_indices.shape) == 2
+		self.word_indices = word_indices
+		self.feature_indices = feature_indices
+		self.batch = None
+		self.N = word_indices.shape[0]
+		self.k = word_indices.shape[1]
+
+	def as_args_list(self):
+		if self.batch is None:
+			return [self.word_indices, self.feature_indices]
+		return [self.word_indices[self.batch,], self.feature_indices[self.batch,]]
+	
+	def new_batch(self, size):
+		self.batch = np.random.choice(self.N, size)
+
+	@property
+	def width(self): return self.k
+	def __len__(self): return self.N
+
+	def copy(self):
+		w = self.word_indices.copy()
+		f = self.feature_indices.copy()
+		p = FeaturizedPhrase(w, f)
+		if self.batch is not None:
+			p.batch = self.batch.copy()
+		return p
+
+
+class VanillaPhrase(Phrase):
+
+	def __init__(self, word_indices):
+		self.word_indices = word_indices
+		self.batch = None
+		self.N = word_indices.shape[0]
+		self.k = word_indices.shape[1]
+		assert len(word_indices.shape) == 2
+
+	def as_args_list(self):
+		if self.batch is None:
+			return [self.word_indices]
+		return [self.word_indices[self.batch,]]
+
+	def new_batch(self, size):
+		self.batch = np.random.choice(self.N, size)
+
+	def copy(self):
+		p = VanillaPhrase(self.word_indices.copy())
+		if self.batch is not None:
+			p.batch = self.batch.copy()
+		return p
+
+	@property
+	def width(self): return self.k
+	def __len__(self): return self.N
+
+
+
+
+
 class Embedding(object):
 
 	def __init__(self, alph, k, f_score, f_step):
@@ -23,7 +118,7 @@ class Embedding(object):
 			  e.g. for Vanilla/VanillaPhrase, f_step: [word_indices, corrupted_word_indices] => score
 			  e.g. for AdditiveEmbeddings/FeaturizedPhrase, f_score: [word_indices, feature_indices, corrutped_word_indices, corrupted_feature_indices] => score
 		"""
-		assert type(self.k) == int
+		assert type(k) == int
 		self.k = k	# how many words in a window
 		self.alph = alph
 		self.num_words = len(alph)
@@ -83,6 +178,8 @@ class Embedding(object):
 
 
 	def train(self, train_phrases, dev_phrases, epochs=10, iterations=30, batch_size=500):
+		print 'train_phrases.shape =', train_phrases.shape
+		print 'self.k =', self.k
 		assert train_phrases.width == dev_phrases.width
 		assert train_phrases.width == self.k
 		train_phrases_corrupted = self.corrupt(train_phrases)
@@ -149,87 +246,10 @@ class Embedding(object):
 
 
 
-class Phrase(object):
-	""" represents a phrase (word window), or many of them """
-
-	def as_args_list(self):
-		""" returns a list of argument values supplied by this object """
-		raise 'subclasses need to implement this'
-	
-	def new_batch(self, size):
-		""" sets a different batch (internally) """
-		raise 'subclasses need to implement this'
-
-	def __len__(self):
-		""" how many examples are in this phrase
-			represents the total, not the batch size
-		"""
-		raise 'subclasses need to implement this'
-
-	def __str__(self):
-		return "<Phrase shape=(%d,%d)>" % (len(self), self.width)
-	
-	@property
-	def width(self):
-		""" how many words are in one of this/these phrase(s) ? """
-		raise 'subclasses need to implement this'
-
-	@property
-	def shape(self):
-		return (len(self), self.width)
-
-class FeaturizedPhrase(Phrase):
-
-	def __init__(self, word_indices, feature_indices):
-		assert word_indices.shape == feature_indices.shape
-		self.word_indices = word_indices
-		self.feature_indices = feature_indices
-		self.batch = None
-		self.N = word_indices.shape[0]
-		self.k = word_indices.shape[1]
-
-	def as_args_list(self):
-		return [self.word_indices[self.batch,], self.feature_indices[self.batch,]]
-	
-	def new_batch(self, size):
-		self.batch = np.random.choice(self.N, size)
-
-	@property
-	def width(self): return self.k
-	def __len__(self): return self.N
-
-class VanillaPhrase(Phrase):
-
-	def __init__(self, word_indices):
-		self.word_indices = word_indices
-		self.batch = None
-		self.N = word_indices.shape[0]
-		self.k = word_indices.shape[1]
-		assert len(word_indices.shape) == 2
-
-	def as_args_list(self):
-		if self.batch is None:
-			return [self.word_indices]
-		return [self.word_indices[self.batch,]]
-
-	def new_batch(self, size):
-		self.batch = np.random.choice(self.N, size)
-
-	def copy(self):
-		p = VanillaPhrase(self.word_indices.copy())
-		p.batch = self.batch
-		return p
-
-	@property
-	def width(self): return self.k
-	def __len__(self): return self.N
-
-
-
 
 class VanillaEmbedding(Embedding, object):
 	
-	def __init__(self, alph, k, d=64, h=40, batch_size=30, learning_rate_scale=1.0):
+	def __init__(self, alph, k, d=64, h=40, learning_rate_scale=1.0, initialization_scale = 1.0):
 		num_words = len(alph)
 		self.k = k	# width of phrase/window
 		self.d = d	# how many features per word
@@ -279,7 +299,11 @@ class VanillaEmbedding(Embedding, object):
 
 		super(VanillaEmbedding, self).__init__(alph, self.k, f_score, f_step)
 
-		self.init_weights()
+		Initializer.set_rand_value(self.W, scale=1e-4*initialization_scale)
+		Initializer.set_unif_value(self.A, 1e-3*initialization_scale)
+		#Initializer.set_rand_value(self.b, scale=1e-5*initialization_scale)
+		Initializer.set_rand_value(self.p, scale=1e-2*initialization_scale)
+		#self.t.set_value(0.0)
 
 
 	# user-friendly version
@@ -293,30 +317,6 @@ class VanillaEmbedding(Embedding, object):
 		i = np.mat( np.array(w, dtype=int_type) )
 		return self.f_score(i)[0]
 
-
-	def init_weights(self, scale=1.0):
-		
-		# TODO fold into __init__
-
-		def set_rand_value(theano_tensor, scale=1.0):
-			old_vals = theano_tensor.get_value()
-			new_vals = (np.random.rand(*old_vals.shape) - 0.5) * scale
-			if(old_vals.dtype != new_vals.dtype):
-				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
-			theano_tensor.set_value(new_vals)
-
-		def set_unif_value(theano_tensor, value):
-			old_vals = theano_tensor.get_value()
-			new_vals = np.tile(value, old_vals.shape)
-			if(old_vals.dtype != new_vals.dtype):
-				new_vals = np.asfarray(new_vals, dtype=old_vals.dtype)
-			theano_tensor.set_value(new_vals)
-
-		set_rand_value(self.W, scale=1e-4*scale)
-		set_unif_value(self.A, 1e-3*scale)
-		#set_rand_value(self.b, scale=1e-7*scale)
-		set_rand_value(self.p, scale=1e-2*scale)
-		#self.t.set_value(0.0)
 	
 	def corrupt(self, phrases):
 		""" phrases is a VanillaPhrase """
@@ -328,7 +328,7 @@ class VanillaEmbedding(Embedding, object):
 		return corrupted
 
 
-class AdditiveEmbedding:
+class AdditiveEmbedding(Embedding, object):
 	""" same as vanilla model, but each word may be decomposed (additively)
 		for words that appear in NOMLEX, I plan to decompose them a vector for their
 		base meaning plus a vector for whether they are in nominal or verbal form
@@ -339,8 +339,11 @@ class AdditiveEmbedding:
 	# take two different values, 'nom' and 'verb'
 	# if i decide to learn with more fine grained features like
 	# dependency paths, then this might be the number of paths to a headword
-	def __init__(self, alph, num_features, k, d=64, h=40):
+	def __init__(self, alph, num_features, k, d=64, h=40, learning_rate_scale = 1.0, initialization_scale = 1.0):
 
+		self.h = h
+		self.k = k
+		self.d = d
 		num_words = len(alph)
 		self.num_features = num_features
 		self.corruptor = WFCorruptionPolicy()
@@ -382,7 +385,6 @@ class AdditiveEmbedding:
 		loss = loss_neg * (loss_neg > 0)
 		avg_loss = loss.mean()
 
-		learning_rate_scale = 1.0
 		args = [word_indices, feat_indices, word_indices_corrupted, feat_indices_corrupted]
 		print 'args =', args
 		self.params = {
@@ -398,25 +400,19 @@ class AdditiveEmbedding:
 		upd = list(itertools.chain(*upd))	# flatten list
 		#print 'updates =', upd
 		f_step = theano.function(args, avg_loss, updates=upd)
+	
+		super(AdditiveEmbedding, self).__init__(alph, self.k, f_score, f_step)
 
-		self.params['p'].set_value(np.random.rand(h) * 1e-2)
-		self.params['A'].set_value(\
-			np.random.rand(self.k * self.d * self.h)\
-			.reshape( (self.k * self.d, self.h) )\
-			*1e-3)
-		self.params['Ew'].set_value(\
-			np.random.rand(self.num_words * self.d)\
-			.reshape( (self.num_words, self.d) )\
-			*1e-5)
-		self.params['Ef'].set_value(\
-			np.random.rand(self.num_features * self.d)\
-			.reshape( (self.num_features, self.d) )\
-			*1e-5)
+		
+		Initializer.set_rand_value(self.Ew, scale=1e-4*initialization_scale)
+		Initializer.set_rand_value(self.Ef, scale=1e-4*initialization_scale)
+		Initializer.set_unif_value(self.A, 1e-3*initialization_scale)
+		#Initializer.set_rand_value(self.b, scale=1e-5*initialization_scale)
+		Initializer.set_rand_value(self.p, scale=1e-2*initialization_scale)
+		#self.t.set_value(0.0)
+
 	
-		super(AdditiveEmbeddings, self).__init__(alph, k, f_score, f_step)
-	
-	def corrupt(self, phrase, features):
-		""" returns a tuple of matrices: (phrases_corrupted, features_corrupted) """
+	def corrupt(self, featurized_phrase):
 		# how to corrupt?
 		# lets never propose mis-matched (word,feature) pairs
 		# we can take this as a statement that we are learning a conditional distribution
@@ -426,19 +422,18 @@ class AdditiveEmbedding:
 		# if you flip a word => delta(data) indicates a word vector needs to be updated
 		# if you flip both => the learner will backprop the gradient to both (inefficient)
 
-		c_phrase = phrase.copy()
-		c_features = features.copy()
-		n, k = phrase.shape
+		t = time.clock()
+		c_phrase = featurized_phrase.copy()
+		n, k = featurized_phrase.shape
 		assert k == self.k
 		mid = k // 2
 		for i in range(n):
 			c = self.corruptor.what_to_corrupt()
 			if c == 'word' or c == 'both':
-				c_phrase[i, mid] = np.random.randint(0, self.num_words-1)
+				c_phrase.word_indices[i, mid] = np.random.randint(0, self.num_words-1)
 			if c == 'phrase' or c == 'both':
-				c_features[i, mid] = np.random.randint(0, self.num_features-1)
-
-		return (c_phrase, c_features)
+				c_phrase.feature_indices[i, mid] = np.random.randint(0, self.num_features-1)
+		return c_phrase
 
 class WFCorruptionPolicy:
 	""" chooses what to corrupt for models of words and features, see AdditiveWordVecs
