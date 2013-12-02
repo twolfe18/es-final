@@ -389,7 +389,7 @@ class AdditiveEmbedding(Embedding, object):
 		print 'args =', args
 		self.params = {
 			'Ew' : AdaGradParam(self.Ew, args, avg_loss, learning_rate=learning_rate_scale),
-			'Ef' : AdaGradParam(self.Ef, args, avg_loss, learning_rate=learning_rate_scale),
+			'Ef' : AdaGradParam(self.Ef, args, avg_loss, learning_rate=0.1*learning_rate_scale),
 			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1 * learning_rate_scale),
 			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
 			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),

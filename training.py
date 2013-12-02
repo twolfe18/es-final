@@ -33,15 +33,22 @@ class Trainer(object):
 		""" return a Phrase corresponding to the index-th partition """
 		raise Exception('subclasses need to implement this')
 
+	
+	def params_to_report_on(self):
+		""" return a list of strings that are keys for self.params
+			every training epoch i'll print some stats about these params
+		"""
+		return []
+
 
 	def run(self):
 
-		emb = self.get_embedding_to_train(learning_rate_scale=3.0)
+		emb = self.get_embedding_to_train(learning_rate_scale=1.0)
 
-		outer_epochs = 500
-		inner_epochs = 5
-		bs = 600
-		itr = 20
+		outer_epochs = 500	# affects the total runtime
+		inner_epochs = 6	# make this larger to amortize reporting time
+		bs = 400			# batch size
+		itr = 30			# how many batch-sized steps to take
 		print 'training for', outer_epochs, 'macro-epochs'
 		W_dev = self.dev_phrase()
 		prev_avg_loss = 1.0
@@ -62,10 +69,22 @@ class Trainer(object):
 					break
 				prev_avg_loss = avg_loss
 			random.shuffle(pi)
+
+			for name in self.params_to_report_on():
+				param = emb.params[name]
+				s = param.shape
+				if len(s) == 0:
+					print "[train] %s=%s" % (name, param.get_value())
+				else:
+					print "[train] %s.shape=%s" % (name, s)
+					print "[train] %s.l2=%s" % (name, param.l2)
+					print "[train] %s.lInf=%s" % (name, param.lInf)
+				print
+
 			if not improvement:
 				break
 
-		print 'saving model...'
+		print 'saving final model...'
 		emb.write_weights(self.model_dir + 'final')
 
 
@@ -112,7 +131,8 @@ class VanillaTrainer(Trainer, object):
 
 class AdditiveTrainer(Trainer, object):
 
-	def __init__(self, model_dir, data_dir, k):
+	def __init__(self, model_dir, data_dir, k, init_params_with_dir=None):
+		self.init_params_with_dir = init_params_with_dir
 		alph = Alphabet(os.path.join(data_dir, 'train-dev.alphabet'))
 		super(AdditiveTrainer, self).__init__(alph, model_dir, data_dir, k)
 
@@ -128,8 +148,34 @@ class AdditiveTrainer(Trainer, object):
 
 
 	def get_embedding_to_train(self, learning_rate_scale=1.0):
-		return AdditiveEmbedding(self.alph, 3, k, learning_rate_scale=learning_rate_scale)
 
+		emb = AdditiveEmbedding(self.alph, 3, self.k, learning_rate_scale=learning_rate_scale)
+
+		# - initialize params['Ef'][0,] = mean(params['W'])
+		# - initialize params['Ew'] = params['W'] - params['Ef'][0,]
+		if self.init_params_with_dir is not None:
+			f = os.path.join(self.init_params_with_dir, 'W.npy')
+			print '[AdditiveTrainer] initializing embeddings from', f
+			W = np.load(f)
+			N, d = W.shape
+			print '[Additive initialize] W.shape =', W.shape
+			print '[Additive initialize] self.k =', emb.d
+			assert N == len(emb.alph)
+			assert d == emb.d
+
+			W_mean = np.mean(W, axis=0)	# avg the rows
+			W_resid = W - W_mean
+
+			z = np.zeros_like(W_mean, dtype=W.dtype)
+			Ef = np.vstack( (W_mean, z, z) )
+			emb.params['Ef'].set_value(Ef)
+
+			emb.params['Ew'].set_value(W_resid)
+
+		return emb
+
+	def params_to_report_on(self):
+		return ['Ew', 'Ef', 'A', 'p', 'b', 't']
 
 	def dev_phrase(self):
 		if self.dev is None:
@@ -151,10 +197,10 @@ class AdditiveTrainer(Trainer, object):
 
 		# about 4.2% last time i checked
 		prop_feat = (feat_indices > 0).sum() / float(len(feat_indices) * len(feat_indices[0]))
-		print "[AdditiveTrainer train_phrase[%d]] have features for %.1f%% of words in windows" % (i, 100.0*prop_feat)
+		print "[AdditiveTrainer partition=%d] have features for %.1f%% of words in windows" % (i, 100.0*prop_feat)
 
 		p = FeaturizedPhrase(word_indices, feat_indices)
-		print "[AdditiveTrainer train_phrase[%d]] phrases.shape=(%d,%d)" % (i, len(p), p.width)
+		print "[AdditiveTrainer partition=%d] phrases.shape=(%d,%d)" % (i, len(p), p.width)
 		return p
 
 
@@ -165,7 +211,7 @@ if __name__ == '__main__':
 	k = 5
 	runners = {
 		'vanilla' : VanillaTrainer('models/vanilla/', data_dir, k), \
-		'additive' : AdditiveTrainer('models/additive/', data_dir, k) \
+		'additive' : AdditiveTrainer('models/additive/', data_dir, k, init_params_with_dir='models/additive-initialization') \
 	}
 	for a in sys.argv[1:]:
 		if a in runners:
