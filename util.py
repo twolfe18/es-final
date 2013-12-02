@@ -277,7 +277,7 @@ class AdaGradParam:
 			input_vars should be a list of variables for whic you'll provide values when you call update()
 		"""
 		self.tvar = theano_mat	# should be a theano.shared
-		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=float_type) * delta)
+		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=theano_mat.dtype) * delta)
 
 		# TODO upgrade to >=0.6rc5 and switch to float32s
 

@@ -1,6 +1,5 @@
 
-from learn_word_vecs import *
-from additive_wordvecs import *
+from embeddings import *
 import numpy as np
 import numpy.random as rand
 import sys
@@ -11,16 +10,15 @@ class VanillaTrainer:
 
 	def run(self):
 
-		#model_dir = 'models/vanilla-testing/'
-		#data_dir = 'data/split-for-testing/'
-		model_dir = 'models/vanilla/'
-		data_dir = 'data/jumbo-test/'
+		model_dir = 'models/vanilla-testing/'
+		data_dir = 'data/split-for-testing/'
+		#model_dir = 'models/vanilla/'
+		#data_dir = 'data/jumbo-test/'
 		k = 5
 
 		a = Alphabet(os.path.join(data_dir, 'train-dev.alphabet'))
 		print 'alphbet contains', len(a), 'words'
-		ve = VanillaEmbeddings(a, k)
-		ve.init_weights()
+		ve = VanillaEmbedding(a, k)
 
 		dev_file = os.path.join(data_dir, 'dev.small.npy')
 		assert os.path.isfile(dev_file)
@@ -34,21 +32,21 @@ class VanillaTrainer:
 		print 'dev file =', dev_file
 		train_readers = [NumpyWindowReader(os.path.join(data_dir, f)) for f in train_files]
 		dev_reader = NumpyWindowReader(dev_file)
-		W_dev = dev_reader.get_phrase_matrix()
+		W_dev = VanillaPhrase(dev_reader.get_phrase_matrix())
 
 		e = 500
-		print 'training for', e, 'epochs'
+		print 'training for', e, 'macro-epochs'
 		prev_avg_loss = 1.0
 		for epoch in range(e):
 			print 'starting epoch', epoch
 			improvement = False
 			for r in train_readers:
-				W_train = r.get_phrase_matrix()
+				W_train = VanillaPhrase(r.get_phrase_matrix())
 				print 'file', r.filename, '...training...'
 				losses = ve.train(W_train, W_dev, epochs=6, iterations=300, batch_size=300)
 				print 'losses =', losses
 				avg_loss = sum(losses) / len(losses)
-				if avg_loss < prev_avg_loss - 1e-4:
+				if avg_loss < prev_avg_loss - 1e-4 or avg_loss / prev_avg_loss < 0.99:
 					d = model_dir + 'epoch' + str(epoch)
 					ve.write_weights(d)
 					improvement = True
@@ -87,18 +85,19 @@ class AdditiveTrainer:
 		prop_feat = (train_features > 0).sum() / float(len(train_features) * len(train_features[0]))
 		print "[AdditiveTrainer] have features for %.1f%% of words in windows" % (100.0*prop_feat)
 
-		av = AdditiveWordVecs(alph, 3, k)
+		av = AdditiveEmbedding(alph, 3, k)
 		for i in range(100):
 			av.train(train_phrases, dev_phrases, train_features, dev_features)
 
 
 if __name__ == '__main__':
-	#vt = VanillaTrainer()
-	#vt.run()
-
-	at = AdditiveTrainer()
-	at.run()
-
+	
+	runners = { 'vanilla':VanillaTrainer(), 'additive':AdditiveTrainer() }
+	for a in sys.argv[1:]:
+		if a in runners:
+			runners[a].run()
+		else:
+			print 'i dont know how to run', a
 
 
 
