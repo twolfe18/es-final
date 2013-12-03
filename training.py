@@ -47,7 +47,7 @@ class Trainer(object):
 
 		outer_epochs = 500	# affects the total runtime
 		inner_epochs = 6	# make this larger to amortize reporting time
-		bs = 500			# batch size
+		bs = 100			# batch size
 		itr = 50			# how many batch-sized steps to take
 		print 'training for', outer_epochs, 'macro-epochs'
 		W_dev = self.dev_phrase()
@@ -62,7 +62,7 @@ class Trainer(object):
 				print 'losses =', losses
 				avg_loss = sum(losses) / len(losses)
 				if avg_loss < prev_avg_loss - 1e-4 or avg_loss / prev_avg_loss < 0.99:
-					if epoch % 10 == 0 or (epoch > 50 and epoch % 5 == 0) or (epoch > 100):
+					if epoch % 4 == 0 or (epoch > 30 and epoch % 2 == 0) or (epoch > 60):
 						emb.write_weights(self.model_dir + 'epoch' + str(epoch))
 					improvement = True
 					prev_avg_loss = avg_loss
@@ -108,7 +108,7 @@ class VanillaTrainer(Trainer, object):
 
 
 	def get_embedding_to_train(self, learning_rate_scale=1.0):
-		emb = VanillaEmbedding(self.alph, self.k, learning_rate_scale=learning_rate_scale)
+		emb = VanillaEmbedding(self.alph, self.k, d=32, h=20, learning_rate_scale=learning_rate_scale)
 		if self.init_params_with_dir is not None:
 			print '[AdditiveTrainer] initializing embeddings from', self.init_params_with_dir
 			W = np.load(os.path.join(self.init_params_with_dir, 'W.npy'))
@@ -146,6 +146,9 @@ class VanillaTrainer(Trainer, object):
 	def train_phrase(self, i):
 		r = self.train_readers[i]
 		return VanillaPhrase(r.get_phrase_matrix())
+
+	def params_to_report_on(self):
+		return ['W', 'A', 'p', 'b']
 
 
 
@@ -232,17 +235,24 @@ class AdditiveTrainer(Trainer, object):
 
 if __name__ == '__main__':
 	
+	init_with = None	# 'models/additive-initialization'
 	data_dir = 'data/jumbo/'
 	k = 5
-	runners = {
-		'vanilla' : VanillaTrainer('models/vanilla/', data_dir, k, init_params_with_dir='models/additive-initialization'), \
-		'additive' : AdditiveTrainer('models/additive/', data_dir, k, init_params_with_dir='models/additive-initialization') \
-	}
-	for a in sys.argv[1:]:
-		if a in runners:
-			runners[a].run()
-		else:
-			print 'i dont know how to run', a
+	if sys.argv[1] == 'vanilla':
+		target = 'models/vanilla/'
+		if len(sys.argv) > 2:
+			target = sys.argv[2]
+		t = VanillaTrainer(target, data_dir, k, init_params_with_dir=init_with)
+		t.run()
+	elif sys.argv[1] == 'additive':
+		target = 'models/additive/'
+		if len(sys.argv) > 2:
+			target = sys.argv[2]
+		t = AdditiveTrainer(target, data_dir, k, init_params_with_dir=init_with)
+		t.run()
+	else:
+		print 'i don\'t know how to handle these args', sys.argv
+
 
 
 

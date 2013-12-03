@@ -307,7 +307,7 @@ class Regularizer:
 		""" returns a theano scalar variable for how much penalty has been incurred """
 		if len(self.penalties) > 0:
 			return sum(self.penalties)
-		return None
+		return 0.0
 
 class AdaGradParam:
 	""" only setup to do minimization

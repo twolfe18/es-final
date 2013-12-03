@@ -261,6 +261,12 @@ class VanillaEmbedding(Embedding, object):
 		self.b = theano.shared(np.zeros(h, dtype=float_type), name='b')					# hidden offset
 		self.p = theano.shared(np.zeros(h, dtype=float_type), name='p')					# hidden => output
 
+		self.reg = Regularizer()
+		self.reg.l1(self.A, 1e-5)
+		self.reg.l2(self.W, 1e-6)
+		self.reg.l2(self.b, 1e-6)
+		self.reg.l1(self.p, 1e-5)
+
 		if int_type == 'int64':
 			word_indices = T.lmatrix('word_indices')
 		else:
@@ -282,11 +288,11 @@ class VanillaEmbedding(Embedding, object):
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
 		loss_neg = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_neg * (loss_neg > 0)
-		avg_loss = loss.mean()
+		avg_loss = loss.mean() + self.reg.regularization_var()
 
 		args = [word_indices, word_indices_corrupted]
 		#print 'args =', args
-		learning_rate_muting = 10.0	# higher means that only W gets updates, 1 means everything has same learning rate
+		learning_rate_muting = 2.0	# higher means that only W gets updates, 1 means everything has same learning rate
 		lrW = learning_rate_scale
 		lrA = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
 		lrp = math.pow(learning_rate_muting, -2.0) * learning_rate_scale
@@ -366,6 +372,13 @@ class AdditiveEmbedding(Embedding, object):
 		self.b = theano.shared(np.zeros(h, dtype=float_type), name='b')						# hidden offset
 		self.p = theano.shared(np.zeros(h, dtype=float_type), name='p')						# hidden => output
 
+		self.reg = Regularizer()
+		self.reg.l2(self.Ew, 1e-6)
+		self.reg.l2(self.Ef, 1e-6)
+		self.reg.l1(self.A, 1e-5)
+		self.reg.l2(self.b, 1e-6)
+		self.reg.l1(self.p, 1e-5)
+
 		if int_type == 'int64':
 			word_indices = T.lmatrix('word_indices')
 			feat_indices = T.lmatrix('feat_indices')
@@ -397,7 +410,7 @@ class AdditiveEmbedding(Embedding, object):
 		})
 		loss_neg = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_neg * (loss_neg > 0)
-		avg_loss = loss.mean()
+		avg_loss = loss.mean() + self.reg.regularization_var()
 
 		args = [word_indices, feat_indices, word_indices_corrupted, feat_indices_corrupted]
 		print 'args =', args

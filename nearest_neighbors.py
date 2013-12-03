@@ -1,4 +1,5 @@
 import os, sys
+import scipy
 import numpy as np
 from util import *
 
@@ -24,7 +25,8 @@ class NearestNeighbors:
 		#	return None
 
 	def dist(self, v1, v2):
-		return np.linalg.norm(v1 - v2, ord=2)
+		#return np.linalg.norm(v1 - v2, ord=2)
+		return scipy.spatial.distance.cosine(v1, v2)
 	
 	def words_and_vecs(self):
 		for i in range(len(self.alph)):
