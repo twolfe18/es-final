@@ -11,6 +11,13 @@ class NearestNeighbors:
 		self.alph = Alphabet(os.path.join(model_dir, 'alphabet.txt'))
 		self.W = np.load(os.path.join(model_dir, 'W.npy'))
 
+		import pickle
+		rami_emb_file = '/home/travis/Dropbox/School/event-semantics/final-project/data/polyglot-en.pkl'
+		words, embeddings = pickle.load(open(rami_emb_file, 'rb'))
+		self.W = embeddings
+		self.alph = Alphabet()
+		for w in words: self.alph.lookup_index(w, add=True)
+
 	def nearest_to(self, word, k=15):
 		#try:
 		i = self.alph.lookup_index(word, add=False)

@@ -20,8 +20,17 @@ class VerbClasses:
 		self.accomplishments = ['arrive', 'reach', 'succeed', 'pass', 'win', 'lose', 'gain', \
 			'die', 'happen', 'acquire', 'find', 'say', 'claim', 'declare', 'avert', 'recognize']
 
-		self.alph = Alphabet(os.path.join(self.model_dir, 'alphabet.txt'))
-		self.W = np.load(os.path.join(self.model_dir, 'W.npy'))
+		use_ramis = True
+		if use_ramis:
+			import pickle
+			rami_emb_file = '/home/travis/Dropbox/School/event-semantics/final-project/data/polyglot-en.pkl'
+			words, embeddings = pickle.load(open(rami_emb_file, 'rb'))
+			self.W = embeddings
+			self.alph = Alphabet()
+			for w in words: self.alph.lookup_index(w, add=True)
+		else:
+			self.alph = Alphabet(os.path.join(self.model_dir, 'alphabet.txt'))
+			self.W = np.load(os.path.join(self.model_dir, 'W.npy'))
 		N, d = self.W.shape
 		print 'W =', self.W.shape, self.W.dtype
 		print 'len(alph) =', len(self.alph)

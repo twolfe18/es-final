@@ -63,7 +63,7 @@ class Trainer(object):
 				avg_loss = sum(losses) / len(losses)
 				if avg_loss < prev_avg_loss - 1e-4 or avg_loss / prev_avg_loss < 0.99:
 					if epoch % 4 == 0 or (epoch > 30 and epoch % 2 == 0) or (epoch > 60):
-						emb.write_weights(self.model_dir + 'epoch' + str(epoch))
+						emb.write_weights(os.path.join(self.model_dir, 'epoch' + str(epoch)))
 					improvement = True
 					prev_avg_loss = avg_loss
 					break
@@ -85,7 +85,7 @@ class Trainer(object):
 				break
 
 		print 'saving final model...'
-		emb.write_weights(self.model_dir + 'final')
+		emb.write_weights(os.path.join(self.model_dir, 'final'))
 
 
 
@@ -148,7 +148,8 @@ class VanillaTrainer(Trainer, object):
 		return VanillaPhrase(r.get_phrase_matrix())
 
 	def params_to_report_on(self):
-		return ['W', 'A', 'p', 'b']
+		#return ['W', 'A', 'p', 'b']
+		return []
 
 
 
