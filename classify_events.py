@@ -35,16 +35,24 @@ class VerbClasses:
 		print 'W =', self.W.shape, self.W.dtype
 		print 'len(alph) =', len(self.alph)
 
+		use_offsets = False
+
 		offsets = theano.shared(np.zeros((3,d), dtype='float64'), name='offsets')
 		weights = theano.shared(np.zeros((3,d), dtype='float64'), name='weights')
 		intercepts = theano.shared(np.zeros(3, dtype='float64'), name='intercepts')
 
 		wordvec = T.dvector('wordvec')	# input
 		label = T.iscalar('label')
-		label_score = T.dot(weights[label,], wordvec - offsets[label,]) + intercepts[label]
+		if use_offsets:
+			label_score = T.dot(weights[label,], wordvec - offsets[label,]) + intercepts[label]
+		else:
+			label_score = T.dot(weights[label,], wordvec) + intercepts[label]
 
 		swordvec = T.stack(wordvec, wordvec, wordvec)
-		model_scores = T.sum(weights * (swordvec - offsets), axis=1) + intercepts	# sum_rows( (3,d) elem-prod (3,d) ) = (3,)
+		if use_offsets:
+			model_scores = T.sum(weights * (swordvec - offsets), axis=1) + intercepts	# sum_rows( (3,d) elem-prod (3,d) ) = (3,)
+		else:
+			model_scores = T.sum(weights * swordvec, axis=1) + intercepts
 		guess = T.argmax(model_scores)
 		
 		loss = np.ones(3) - T.eye(3, k=label)
@@ -57,11 +65,12 @@ class VerbClasses:
 		self.offsets = AdaGradParam(offsets, [wordvec, label], obj, learning_rate=scale/2.0)
 		self.intercepts = AdaGradParam(intercepts, [wordvec, label], obj, learning_rate=scale)
 
-		upd = self.weights.updates + self.offsets.updates + self.intercepts.updates
+		if use_offsets:
+			upd = self.weights.updates + self.offsets.updates + self.intercepts.updates
+		else:
+			upd = self.weights.updates + self.intercepts.updates
 		self.f_step = theano.function([wordvec, label], guess, updates=upd)
 		self.f_predict = theano.function([wordvec], guess)
-
-		self.f_debug = theano.function([wordvec], model_scores)
 
 	def train_classifier(self):
 		
@@ -83,7 +92,6 @@ class VerbClasses:
 		print 'wordvecs =', wordvecs.shape, wordvecs.dtype
 
 		# try a prediction
-		print 'first scores =', self.f_debug(wordvecs[0])
 		print 'first prediction =', self.f_predict(wordvecs[0])
 		
 		right = 0
