@@ -319,7 +319,7 @@ class AdaGradParam:
 			input_vars should be a list of variables for whic you'll provide values when you call update()
 		"""
 		print '[AdaGradParam init]', theano_mat.name, 'has learning rate of', learning_rate
-		print '[AdaGradParam init] tvar.type =', theano_mat.type
+		#print '[AdaGradParam init] tvar.type =', theano_mat.type
 		self.tvar = theano_mat	# should be a theano.shared
 		self.gg = theano.shared(np.ones_like(self.tvar.get_value(), dtype=theano_mat.dtype) * delta)
 
@@ -335,8 +335,8 @@ class AdaGradParam:
 
 		gg_update = self.gg + (grad ** 2)
 		tvar_update = self.tvar - self.lr * grad / (self.gg ** 0.5)
-		print '[AdaGradParam] gg_update.type =', gg_update.type
-		print '[AdaGradParam] tvar_update.type =', tvar_update.type
+		#print '[AdaGradParam] gg_update.type =', gg_update.type
+		#print '[AdaGradParam] tvar_update.type =', tvar_update.type
 		self.updates = [(self.gg, gg_update), (self.tvar, tvar_update)]
 		self.f_update = theano.function(input_vars, grad, updates=self.updates)
 

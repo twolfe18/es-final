@@ -47,8 +47,8 @@ class Trainer(object):
 
 		outer_epochs = 500	# affects the total runtime
 		inner_epochs = 6	# make this larger to amortize reporting time
-		bs = 400			# batch size
-		itr = 30			# how many batch-sized steps to take
+		bs = 500			# batch size
+		itr = 50			# how many batch-sized steps to take
 		print 'training for', outer_epochs, 'macro-epochs'
 		W_dev = self.dev_phrase()
 		prev_avg_loss = 1.0
@@ -92,8 +92,9 @@ class Trainer(object):
 class VanillaTrainer(Trainer, object):
 
 
-	def __init__(self, model_dir, data_dir, k):
+	def __init__(self, model_dir, data_dir, k, init_params_with_dir=None):
 
+		self.init_params_with_dir = init_params_with_dir
 		alph = Alphabet(os.path.join(data_dir, 'train-dev.alphabet'))
 		super(VanillaTrainer, self).__init__(alph, model_dir, data_dir, k)
 
@@ -107,7 +108,27 @@ class VanillaTrainer(Trainer, object):
 
 
 	def get_embedding_to_train(self, learning_rate_scale=1.0):
-		return VanillaEmbedding(self.alph, self.k, learning_rate_scale=learning_rate_scale)
+		emb = VanillaEmbedding(self.alph, self.k, learning_rate_scale=learning_rate_scale)
+		if self.init_params_with_dir is not None:
+			print '[AdditiveTrainer] initializing embeddings from', self.init_params_with_dir
+			W = np.load(os.path.join(self.init_params_with_dir, 'W.npy'))
+			N, d = W.shape
+			print '[Additive initialize] W.shape =', W.shape
+			print '[Additive initialize] self.k =', emb.d
+			assert N == len(emb.alph)
+			assert d == emb.d
+
+			emb.params['W'].set_value(W)
+
+			A = np.load(os.path.join(self.init_params_with_dir, 'A.npy'))
+			emb.params['A'].set_value(A)
+
+			b = np.load(os.path.join(self.init_params_with_dir, 'b.npy'))
+			emb.params['b'].set_value(b)
+
+			p = np.load(os.path.join(self.init_params_with_dir, 'p.npy'))
+			emb.params['p'].set_value(p)
+		return emb
 
 	
 	def dev_phrase(self):
@@ -214,7 +235,7 @@ if __name__ == '__main__':
 	data_dir = 'data/jumbo/'
 	k = 5
 	runners = {
-		'vanilla' : VanillaTrainer('models/vanilla/', data_dir, k), \
+		'vanilla' : VanillaTrainer('models/vanilla/', data_dir, k, init_params_with_dir='models/additive-initialization'), \
 		'additive' : AdditiveTrainer('models/additive/', data_dir, k, init_params_with_dir='models/additive-initialization') \
 	}
 	for a in sys.argv[1:]:

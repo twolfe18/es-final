@@ -466,7 +466,7 @@ class WFCorruptionPolicy:
 		WF = "word feature"
 	"""
 
-	def __init__(self, prob_just_word=0.5, prob_just_feature=0.4, prob_both=0.1):
+	def __init__(self, prob_just_word=0.9, prob_just_feature=0.1, prob_both=0.0):
 		z = prob_just_word + prob_just_feature + prob_both
 		self.prob_just_word = prob_just_word / z
 		self.prob_just_feature = prob_just_feature / z
