@@ -260,7 +260,6 @@ class VanillaEmbedding(Embedding, object):
 		self.A = theano.shared(np.zeros((k * d, h), dtype=float_type), name='A')		# word vecs => hidden
 		self.b = theano.shared(np.zeros(h, dtype=float_type), name='b')					# hidden offset
 		self.p = theano.shared(np.zeros(h, dtype=float_type), name='p')					# hidden => output
-		self.t = theano.shared(0.0, name='t')											# output offset
 
 		if int_type == 'int64':
 			word_indices = T.lmatrix('word_indices')
@@ -270,13 +269,16 @@ class VanillaEmbedding(Embedding, object):
 		phrases_tensor = self.W[word_indices]	# shape=(n, k, self.d)
 		phrases = phrases_tensor.reshape((n, k * d))
 		hidden = T.tanh( T.dot(phrases, self.A) + self.b )
-		scores = T.tanh( T.dot(hidden, self.p) + self.t )
+		scores = T.dot(hidden, self.p)
 
 		# score function
 		f_score = theano.function([word_indices], scores)
 
 		# loss
-		word_indices_corrupted = T.imatrix('word_indices_corrupted')
+		if int_type == 'int64':
+			word_indices_corrupted = T.lmatrix('word_indices_corrupted')
+		else:
+			word_indices_corrupted = T.imatrix('word_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={word_indices: word_indices_corrupted})
 		loss_neg = T.ones_like(scores) + scores_corrupted - scores
 		loss = loss_neg * (loss_neg > 0)
@@ -284,12 +286,16 @@ class VanillaEmbedding(Embedding, object):
 
 		args = [word_indices, word_indices_corrupted]
 		#print 'args =', args
+		learning_rate_muting = 10.0	# higher means that only W gets updates, 1 means everything has same learning rate
+		lrW = learning_rate_scale
+		lrA = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
+		lrp = math.pow(learning_rate_muting, -2.0) * learning_rate_scale
+		lrb = math.pow(learning_rate_muting, -3.0) * learning_rate_scale
 		self.params = {
-			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=learning_rate_scale),
-			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1 * learning_rate_scale),
-			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
-			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
-			't' : AdaGradParam(self.t, args, avg_loss, learning_rate=1e-2 * learning_rate_scale) \
+			'W' : AdaGradParam(self.W, args, avg_loss, learning_rate=lrW),
+			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=lrA),
+			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=lrp),
+			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=lrb) \
 		}
 
 		upd = [p.updates for p in self.params.values()]
@@ -299,11 +305,16 @@ class VanillaEmbedding(Embedding, object):
 
 		super(VanillaEmbedding, self).__init__(alph, self.k, f_score, f_step)
 
-		Initializer.set_rand_value(self.W, scale=1e-4*initialization_scale)
-		Initializer.set_unif_value(self.A, 1e-3*initialization_scale)
-		#Initializer.set_rand_value(self.b, scale=1e-5*initialization_scale)
-		Initializer.set_rand_value(self.p, scale=1e-2*initialization_scale)
-		#self.t.set_value(0.0)
+
+		# initialize
+		Initializer.set_rand_ball(self.W, initialization_scale)
+
+		# d=64,k=5,h=40 => rA=rb=0.258
+		Initializer.set_rand_ball(self.A, initialization_scale * Initializer.compute_r(d * self.k, h))
+		Initializer.set_rand_ball(self.b, initialization_scale * Initializer.compute_r(d * self.k, h))
+
+		# h=40 => rp=0.765
+		Initializer.set_rand_ball(self.p, initialization_scale * Initializer.compute_r(h, 1))
 
 
 	# user-friendly version
@@ -354,7 +365,6 @@ class AdditiveEmbedding(Embedding, object):
 		self.A = theano.shared(np.zeros((k * d, h), dtype=float_type), name='A')			# word+feat => hidden
 		self.b = theano.shared(np.zeros(h, dtype=float_type), name='b')						# hidden offset
 		self.p = theano.shared(np.zeros(h, dtype=float_type), name='p')						# hidden => output
-		self.t = theano.shared(0.0, name='t')												# output offset
 
 		if int_type == 'int64':
 			word_indices = T.lmatrix('word_indices')
@@ -369,14 +379,18 @@ class AdditiveEmbedding(Embedding, object):
 		features = features_tensor.reshape((n, k * self.d))
 		latent = phrases + features
 		hidden = T.tanh( T.dot(latent, self.A) + self.b )
-		scores = T.tanh( T.dot(hidden, self.p) + self.t )
+		scores = T.dot(hidden, self.p)
 
 		# score function
 		f_score = theano.function([word_indices, feat_indices], scores)
 
 		# loss
-		word_indices_corrupted = T.imatrix('word_indices_corrupted')
-		feat_indices_corrupted = T.imatrix('feat_indices_corrupted')
+		if int_type == 'int64':
+			word_indices_corrupted = T.lmatrix('word_indices_corrupted')
+			feat_indices_corrupted = T.lmatrix('feat_indices_corrupted')
+		else:
+			word_indices_corrupted = T.imatrix('word_indices_corrupted')
+			feat_indices_corrupted = T.imatrix('feat_indices_corrupted')
 		scores_corrupted = theano.clone(scores, replace={
 			word_indices: word_indices_corrupted, \
 			feat_indices: feat_indices_corrupted,
@@ -387,13 +401,19 @@ class AdditiveEmbedding(Embedding, object):
 
 		args = [word_indices, feat_indices, word_indices_corrupted, feat_indices_corrupted]
 		print 'args =', args
+		learning_rate_muting = 5.0	# higher means that only W gets updates, 1 means everything has same learning rate
+		lrEw = learning_rate_scale
+		lrEf = learning_rate_scale
+		#lrEf = math.pow(learning_rate_muting, -0.5) * learning_rate_scale
+		lrA = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
+		lrp = math.pow(learning_rate_muting, -2.0) * learning_rate_scale
+		lrb = math.pow(learning_rate_muting, -3.0) * learning_rate_scale
 		self.params = {
-			'Ew' : AdaGradParam(self.Ew, args, avg_loss, learning_rate=learning_rate_scale),
-			'Ef' : AdaGradParam(self.Ef, args, avg_loss, learning_rate=0.1*learning_rate_scale),
-			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=1e-1 * learning_rate_scale),
-			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
-			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=1e-2 * learning_rate_scale),
-			't' : AdaGradParam(self.t, args, avg_loss, learning_rate=1e-2 * learning_rate_scale) \
+			'Ew' : AdaGradParam(self.Ew, args, avg_loss, learning_rate=lrEw),
+			'Ef' : AdaGradParam(self.Ef, args, avg_loss, learning_rate=lrEf),
+			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=lrA),
+			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=lrp),
+			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=lrb) \
 		}
 
 		upd = [p.updates for p in self.params.values()]
@@ -404,12 +424,18 @@ class AdditiveEmbedding(Embedding, object):
 		super(AdditiveEmbedding, self).__init__(alph, self.k, f_score, f_step)
 
 		
-		Initializer.set_rand_value(self.Ew, scale=1e-4*initialization_scale)
-		Initializer.set_rand_value(self.Ef, scale=1e-4*initialization_scale)
-		Initializer.set_unif_value(self.A, 1e-3*initialization_scale)
-		#Initializer.set_rand_value(self.b, scale=1e-5*initialization_scale)
-		Initializer.set_rand_value(self.p, scale=1e-2*initialization_scale)
-		#self.t.set_value(0.0)
+		# initialize
+		# NOTE this is the uninformed version
+		# should really initialize from previous vanilla model
+		Initializer.set_rand_ball(self.Ew, initialization_scale)
+		Initializer.set_rand_ball(self.Ef, initialization_scale * self.num_features / math.pow(self.num_words, 1.0/3.0))
+
+		# d=64,k=5,h=40 => rA=rb=0.258
+		Initializer.set_rand_ball(self.A, initialization_scale * Initializer.compute_r(d * self.k, h))
+		Initializer.set_rand_ball(self.b, initialization_scale * Initializer.compute_r(d * self.k, h))
+
+		# h=40 => rp=0.765
+		Initializer.set_rand_ball(self.p, initialization_scale * Initializer.compute_r(h, 1))
 
 	
 	def corrupt(self, featurized_phrase):

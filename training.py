@@ -111,7 +111,7 @@ class VanillaTrainer(Trainer, object):
 
 	
 	def dev_phrase(self):
-		dev_file = os.path.join(self.data_dir, 'dev.small.npy')
+		dev_file = os.path.join(self.data_dir, 'dev.tiny.npy')
 		print 'dev file =', dev_file
 		assert os.path.isfile(dev_file)
 		dev_reader = NumpyWindowReader(dev_file)
@@ -154,33 +154,37 @@ class AdditiveTrainer(Trainer, object):
 		# - initialize params['Ef'][0,] = mean(params['W'])
 		# - initialize params['Ew'] = params['W'] - params['Ef'][0,]
 		if self.init_params_with_dir is not None:
-			f = os.path.join(self.init_params_with_dir, 'W.npy')
-			print '[AdditiveTrainer] initializing embeddings from', f
-			W = np.load(f)
+			print '[AdditiveTrainer] initializing embeddings from', self.init_params_with_dir
+			W = np.load(os.path.join(self.init_params_with_dir, 'W.npy'))
 			N, d = W.shape
 			print '[Additive initialize] W.shape =', W.shape
 			print '[Additive initialize] self.k =', emb.d
 			assert N == len(emb.alph)
 			assert d == emb.d
 
-			W_mean = np.mean(W, axis=0)	# avg the rows
-			W_resid = W - W_mean
+			emb.params['Ew'].set_value(W)
 
-			z = np.zeros_like(W_mean, dtype=W.dtype)
-			Ef = np.vstack( (W_mean, z, z) )
-			emb.params['Ef'].set_value(Ef)
+			Ef = emb.params['Ef']
+			Ef.set_value( np.zeros_like(Ef.get_value(), dtype=Ef.dtype) )
 
-			emb.params['Ew'].set_value(W_resid)
+			A = np.load(os.path.join(self.init_params_with_dir, 'A.npy'))
+			emb.params['A'].set_value(A)
+
+			b = np.load(os.path.join(self.init_params_with_dir, 'b.npy'))
+			emb.params['b'].set_value(b)
+
+			p = np.load(os.path.join(self.init_params_with_dir, 'p.npy'))
+			emb.params['p'].set_value(p)
 
 		return emb
 
 	def params_to_report_on(self):
-		return ['Ew', 'Ef', 'A', 'p', 'b', 't']
+		return ['Ew', 'Ef', 'A', 'p', 'b']
 
 	def dev_phrase(self):
 		if self.dev is None:
 			print '[Additive dev_phrase] constructing dev phrase...'
-			word_indices = np.load(os.path.join(self.data_dir, 'dev.small.npy'))
+			word_indices = np.load(os.path.join(self.data_dir, 'dev.tiny.npy'))
 			feat_indices = self.nomlex.get_features(word_indices)
 			self.dev = FeaturizedPhrase(word_indices, feat_indices)
 		return self.dev
