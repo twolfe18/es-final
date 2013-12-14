@@ -34,6 +34,27 @@ class NearestNeighbors:
 	def dist(self, v1, v2):
 		#return np.linalg.norm(v1 - v2, ord=2)
 		return scipy.spatial.distance.cosine(v1, v2)
+
+	def nearest_to2(self, word1, word2, k=15):
+		#try:
+		i1 = self.alph.lookup_index(word1, add=False)
+		i2 = self.alph.lookup_index(word2, add=False)
+		v1 = self.W[i1]
+		v2 = self.W[i2]
+		if self.show_vec:
+			print word1, v1
+			print word2, v2
+		print 'sorting vecs...'
+		cands = [(w, self.dist2(wv, v1, v2)) for w, wv in self.words_and_vecs()]
+		return sorted(cands, key=lambda wd: wd[1])[:k]
+		#except:
+		#	print "[nearest_to] \"%s\" was not found in the alphabet (len=%d)" % (word, len(self.alph))
+		#	return None
+
+	def dist2(self, vec, c1, c2, softness=0.1):
+		d1 = self.dist(vec, c1)
+		d2 = self.dist(vec, c2)
+		return (d1 + softness) + (d2 + softness)
 	
 	def words_and_vecs(self):
 		for i in range(len(self.alph)):
@@ -50,7 +71,13 @@ if __name__ == '__main__':
 
 	while True:
 		word = raw_input('> ')
-		g = nn.nearest_to(word)
+		ar = word.split()
+		if len(ar) == 1:
+			g = nn.nearest_to(word)
+		elif len(ar) == 2:
+			g = nn.nearest_to2(ar[0], ar[1])
+		else:
+			continue
 		if g:
 			for syn, dist in g:
 				print '\t', syn, '\t', dist
