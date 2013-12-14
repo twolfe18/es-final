@@ -2,7 +2,22 @@
 
 ==== Motivation ====
 1/2 page
-- 
+- we want *some* account of learning
+	- linguistic work we read takes "the lexicon" as given, and it's not
+	- NLP is based on experts
+	- people who learn a language do not need an expert, so *some* systems can do it without experts
+	- whether or not humans come "preprogrammed" with the special sauce for learning language is an open question
+	- but a system that can learn from nothing but bare data is highly desireable
+- features suck
+	- in NLP we have experts write down features that rarely come close to human performance
+	- this mismatch means that there is something in our heads that didn't make it into the features
+	- features fail to generalize: accross tasks, across languages
+	- features are not egalitarian! high resource languages are the only ones that receive attention
+- embeddings are somewhat neurally plausible
+	- they are a simplification, but a much more natural fit than logic to the brain
+
+# TODO write more about *events* which is the focus of this project
+
 
 ==== Previous Work ====
 1/2 page
@@ -10,18 +25,64 @@
 
 ==== What we want to learn ====
 1/2 page
+- vectors for events
+- these vectors should somehow explain the vectors for words that are used to describe these events
+	- need to ground out in language modeling, where most of our training data is
+- hypothesis:
+	- events, as concepts that occur in our brains, if modelled, help explain language modeling data
+	- we can match up word representations to event representations using a syntactic (or related) transformation
 
 
 ==== How we learn ====
 1/2 page
 - low (64) dimensional vectors for every word (appearing at least 100 times)
 
+- event specific version
+	- see ideas9.txt
+
 
 ==== What we can hope to learn (and why) ====
 1 page
+- information in distant words is tied
+	i,j,k : same-window(i,j) & same-window(j,k) => tied(i,k)
+	not clear how strong this is
+- scalar adjectives (deMarneffe)
+- relations on nominals (Mikolov)
+
+- if windows are wide enough and we have enough bits
+	- then human's solution is feasible
+	- what i mean is that we are trying a task that is not ill-posed
+		- like "predict tomorrows stock prices from last year's weather forecasts"
+
+- parsing is possible in a neural net
+	- just need a series of maxs, just like CRF parsing
 
 
 ==== What we can't hope to learn (and why) ====
 1 page
+- we are not modeling anything at the *instance* level, only type level
+- we are not modeling the argument structure or theta roles of an event
+
+- no instances: any time you see the word foo, it means exactly the same thing
+	- forces instance-idiosyncratic information into the A matrix
+	- A matrix is not specific to any setup (e.g. syntactic category), so this is a high burden
+	- polysemy can be encoded in W, but there is no regular treatment of it, so training has to figure this out
+
+- we take narrow windows: many arguments will be external to the window
+	- even ARG0 won't consistenly be in the window of a predicate (mostly verb for this statement)
+		because ARG0 may or may not be the syntactic subject
+	- training proceedure never sees full views of entire argumen structure
+	***	- e.g. if there is a negative interaction between arguments that don't appear together => can't learn this!
+
+
+
+
+
+
+
+
+
+
+
 
 

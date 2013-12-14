@@ -19,55 +19,228 @@
   I need to write an abstract.
 \end{abstract}
 
-\section{Introduction}
+\section{Motivation}
+1/2 page
+- we want *some* account of learning
+	- linguistic work we read takes "the lexicon" as given, and it's not
+	- NLP is based on experts
+	- people who learn a language do not need an expert, so *some* systems can do it without experts
+	- whether or not humans come "preprogrammed" with the special sauce for learning language is an open question
+	- but a system that can learn from nothing but bare data is highly desireable
 
-Start here.
+- features suck
+	- in NLP we have experts write down features that rarely come close to human performance
+	- this mismatch means that there is something in our heads that didn't make it into the features
+	- features fail to generalize: accross tasks, across languages
+	- features are not egalitarian! high resource languages are the only ones that receive attention
 
-An update.
+- embeddings are somewhat neurally plausible
+	- they are a simplification, but a much more natural fit than logic to the brain
 
-another update.
-
-last update2.
-
-now its working.
-
-lskdfjlds
-new shit.
+TODO write more about *events* which is the focus of this project
 
 
+\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1/2 page
 
-\begin{thebibliography}{}
 
-\bibitem[\protect\citename{Aho and Ullman}1972]{Aho:72}
-Alfred~V. Aho and Jeffrey~D. Ullman.
-\newblock 1972.
-\newblock {\em The Theory of Parsing, Translation and Compiling}, volume~1.
-\newblock Prentice-{Hall}, Englewood Cliffs, NJ.
+\section{What we want to learn} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1/2 page
+- vectors for events
+	- syntax agnostic
+- these vectors should somehow explain the vectors for words that are used to describe these events
+	- need to ground out in language modeling, where most of our training data is
+- hypothesis:
+	- events, as concepts that occur in our brains, if modelled, help explain language modeling data
+	- we can match up word representations to event representations using a syntactic (or related) transformation
 
-\bibitem[\protect\citename{{American Psychological Association}}1983]{APA:83}
-{American Psychological Association}.
-\newblock 1983.
-\newblock {\em Publications Manual}.
-\newblock American Psychological Association, Washington, DC.
 
-\bibitem[\protect\citename{{Association for Computing Machinery}}1983]{ACM:83}
-{Association for Computing Machinery}.
-\newblock 1983.
-\newblock {\em Computing Reviews}, 24(11):503--512.
+\section{Model and Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1/2 page
+A primary goal of this work is to learn from unannotated text and
+the simplest way to do this is via language modeling, i.e. inducing
+a score or probability distribution over word sequences.
+Previous work has shown that we can learn very fine grained information
+by inducing features for a language model.
+While previous work has referred to this as language modelling,
+this has the unwanted connotation that we are interested in the
+numerical scores that come out of the language model for some NLP task.
+Instead, we'll refer to our modelling as addressing {\em coherence},
+and we'll discuss the factors that lead to coherence and how we might learn them. 
+Later \ref{section:unlearnability}, we'll discuss ways in which our model of coherence
+fails as a general explanation of coherence and how we might improve it.
 
-\bibitem[\protect\citename{Chandra \bgroup et al.\egroup }1981]{Chandra:81}
-Ashok~K. Chandra, Dexter~C. Kozen, and Larry~J. Stockmeyer.
-\newblock 1981.
-\newblock Alternation.
-\newblock {\em Journal of the Association for Computing Machinery},
-  28(1):114--133.
+First, we will describe the model we are extending, that of \cite{rami}.
+- low (64) dimensional vectors for every word (appearing at least 100 times)
+% TODO
 
-\bibitem[\protect\citename{Gusfield}1997]{Gusfield:97}
-Dan Gusfield.
-\newblock 1997.
-\newblock {\em Algorithms on Strings, Trees and Sequences}.
-\newblock Cambridge University Press, Cambridge, UK.
+% this likely has to go
+% it seems that I'm fitting my argument to the vectors not the other way around!
+% the idea of softening formal semantics for a "dumb" learner has promise, but you need real examples
+\subsection{Concepts vs Semantics}
+Given a model of coherence, we wish to untie the model's notion of syntactic
+and semantic, or perhaps more appriately, {\em conceptual} coherence.
+From now on we will talk about the concept of a word rather than its ``semantics"
+for a few reasons. First, the properties of a word that we want to refer to do
+not constitute a semantic representation in any formal sense, but rather encode
+properties of a ``concept" that may be useful in a formal semantics.
+For example, if we wanted to say that ``wedding" and ``marry" are conceptually
+similar, because for instance, they can be used when describing the same event,
+we would not want to constrain ourselves any formal semantic expression between
+the two words. The urge to refine ``concepts" into pieces of a formal semantic theory
+are appealing to a theoretician (for example for falsifiability purposes), but are
+dispreferred from a learning perspective because they might place an unreasonably high
+burden on the statistical learner\footnote{the analogy to teaching a human might be that
+if you are teaching a student physics, it is best to start with the theory of
+Newtonian physics and work your way up to General Relativity rather than insist from
+day 1 that space-time is non-Euclidean}.
+For example we might also want to argue that the concepts for ``own" and ``purchase"
+are related because for someone to own a thing the almost certainly had to purchase it.
+This is different from the relationship between ``wedding" and ``marry", but a notion
+of similarity that ties both of these pairs together can be useful in explaining
+event coreference.
 
-\end{thebibliography}
+\subsection{Untying Conceptual and Syntactic Coherence}
+The training regime will mean that our model must be able to distinguish
+between syntactically malformed phrases from correct ones,
+so we cannot ignore modeling syntax.
+However, on the assumption that we want to have a representation
+for every word, we want each word to efficiently represent its
+syntactic properties because we believe that bits in our representation are scarce.
+This might be in terms of statistical estimation efficiency (more bits mean that we need more data to fit them), 
+or computational estimation efficiency (more bits means running our optimization proceedure will take longer).
+
+
+% I'm going to need to revist the proportions of attention i want to spend
+% and how i'm going to weave together the very general with the implementation
+% details, but I should get down some implementation details.
+\subsection{Nuts and Bolts}
+% mention NOMLEX!
+To facilitate learning conceptual properties as distinct from syntactic ones,
+we parameterize our model with two matrices, $W$ and $S$.
+The rows of thse matrices will catpure the properties we want to learn.
+Our model will define the vector for word $i$ with syntactic tag $t(i)$
+as the concatenation of $W_{i,\bullet}$ and $S_{t(i),\bullet}$ and refer to it as $v_i$.
+The syntactic tag information is what allows this model to separate the conceptual
+and syntactic properties. For this work, we will use part of speect tags because
+they are easy to aquire in a relatively low-resource setting \cite{pos},
+but you could easily extend these tags to be more informative provided
+the cardinality of the tagset is not too large or a provided a factorized representation is used.
+% TODO are "conceptual" properties just residual of syntactic properties?
+
+The model of coherence will take a phrase $x = [v_{i-k}, ..., v_i, ..., v_{i+k}]$,
+concatenate all of the word representations into a very tall vector, and then score it
+with a nonlinear function
+\[
+	s(x) = p^t \cdot \tanh( A \cdot x + b )
+\]
+where $b$ is a vector of offsets,
+$\tanh$ operates element-wise over the affine transformation of the stacked phrase vector,
+and $p$ projects the resulting vector down to a real value.
+Scoring functions of this form are universal function approximators
+provided $A$ is of sufficient dimension\cite{Hornik:1989}.
+
+% perturb, margin
+In order to train our coherence (language) model efficiently, we rely on
+the discriminative training method proposed in \cite{rami} which is based
+on random perturbations of observed data. The idea is you take a phrase $x$
+and create a copy which is slighly corruped $\tilde{x}$. Given this pair,
+we want to learn parameters so that $s(x) \ge s(\tilde{x}) + 1$.
+The intuition is that our model will learn to score coherent phrases highly
+and incoherent ones lowly.
+
+The corruption model affects the parameters we learn.
+We follow \cite{rami} in that we only corrupt the middle word of the language model,
+but we still have to decide whether to corrupt the word, its part of speech tag, or both.
+In this work we do not consider perturbations of both because that leads to a very
+diffuse gradient which updates both the $W$ and $S$ matrices rather than just one.
+As a heuristic for when to perturb the word vs it's tag, we use
+\[
+	p(\mbox{perturb word}) = \frac
+		{\sqrt{|W|} \times H(p_W)}
+	{\sqrt{|W|} \times H(p_W) + \sqrt{|S|} \times H(p_S)}
+\]
+where $|W|$ is the number of parameters in the $W$ matrix, $H(\cdot)$ is
+the entropy of a distribution, and $p_W$ and $p_S$ are the unigram distributions
+of words and part of speech tags respectively\footnote{You could consider methods
+that make a perturbation choice based on the phrase, but these methods are
+substantially slower at training time or would require a lot of offline computation.
+A careful implementation could do this efficiently, but that is not in the scope of this paper.
+The method used in this paper only requires a few bits of entropy and no memory accesses.}.
+
+
+
+Given a large corpus, we first give every word that appears at least 100
+times an index and label all other words as \texttt{OOV}\footnote{we will learn
+one vector for \texttt{OOV} even though there are many \texttt{OOV} words}.
+Numbers are replaced by a unique token that only says how many digits are in
+the token\footnote{e.g. ``120" $\rightarrow$ \texttt{3D} and ``1995" $\rightarrow$ \texttt{4D}}.
+We then break text up in windows of size 5 ($k=2$) and shuffle all of the instances.
+
+Our dataset was the New York Times part of the Annotated Gigaword dataset \cite{agiga},
+ranging from 2000 to 2004. This yields a dataset with 153,762 unique words and 
+456,746,432 phrases.
+
+The feedforward network was implemented in Theano \cite{theano},
+a python library which provides automatic differentiation and support for GPU computing.
+Training was run using a variant of batched stochastic gradient descent called AdaGrad \cite{adagrad}
+\footnote{Batches of 500 examples worked best in our experiments}.
+
+
+
+
+
+
+\section{What we can learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1 page
+- information in distant words is tied
+	i,j,k : same-window(i,j) and same-window(j,k) => tied(i,k)
+	not clear how strong this is
+- scalar adjectives (deMarneffe)
+- relations on nominals (Mikolov)
+
+- if windows are wide enough and we have enough bits
+	- then human's solution is feasible
+	- what i mean is that we are trying a task that is not ill-posed
+		- like "predict tomorrows stock prices from last year's weather forecasts"
+
+- parsing is possible in a neural net
+	- just need a series of maxs, just like CRF parsing
+
+
+\section{What we can't/won't learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\label{section:unlearnability}
+% 1 page
+- we are not modeling anything at the *instance* level, only type level
+- we are not modeling the argument structure or theta roles of an event
+
+- no instances: any time you see the word foo, it means exactly the same thing
+	- forces instance-idiosyncratic information into the A matrix
+	- A matrix is not specific to any setup (e.g. syntactic category), so this is a high burden
+	- polysemy can be encoded in W, but there is no regular treatment of it, so training has to figure this out
+
+- we take narrow windows: many arguments will be external to the window
+	- even ARG0 won't consistenly be in the window of a predicate (mostly verb for this statement)
+		because ARG0 may or may not be the syntactic subject
+	- training proceedure never sees full views of entire argumen structure
+	***	- e.g. if there is a negative interaction between arguments that don't appear together => can't learn this!
+
+
+\section{Improvements}
+- train on dependency parses (not low resource)
+	- teaches you selectional preferences, but no better than the parser was!
+- train on consecutive verbs or subjects
+	- teaches you about discourse
+	- the event described before and after an event is likely to be relevant (e.g. scripts)
+- use a recurrent NN to get something like an HMM
+	- an attempt to get over narrow windows
+	- check, i think Mikolov did this
+- use bags of words related to an event with an intruder
+
+
+
+
+\bibliography{sources}{}
+\bibliographystyle{plain}
 
 \end{document}
