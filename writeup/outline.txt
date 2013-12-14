@@ -1,0 +1,27 @@
+
+
+==== Motivation ====
+1/2 page
+- 
+
+==== Previous Work ====
+1/2 page
+
+
+==== What we want to learn ====
+1/2 page
+
+
+==== How we learn ====
+1/2 page
+- low (64) dimensional vectors for every word (appearing at least 100 times)
+
+
+==== What we can hope to learn (and why) ====
+1 page
+
+
+==== What we can't hope to learn (and why) ====
+1 page
+
+
