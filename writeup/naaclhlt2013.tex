@@ -19,8 +19,11 @@
   I need to write an abstract.
 \end{abstract}
 
-\section{Motivation}
-1/2 page
+
+
+\section{Introduction}
+% 1 page
+%%% GENERAL
 - we want *some* account of learning
 	- linguistic work we read takes "the lexicon" as given, and it's not
 	- NLP is based on experts
@@ -37,23 +40,66 @@
 - embeddings are somewhat neurally plausible
 	- they are a simplification, but a much more natural fit than logic to the brain
 
-TODO write more about *events* which is the focus of this project
+%%% EVENTS
+Turning more specifically to events and their descriptions,
+we aim to utilize unsupervised feature learning in order to
+come up with representations of events.
+As is generally true with unsupervised learning, you cannot learn
+things that are not present in the data, so this goal of learning event
+representations comes hand in hand with a hypothesis about the
+distribution of event descriptions and their arguments.
+The hypothesis is that there is regularity in the realization of predicates
+and their arguments which is independent of syntax which can be observed
+in local fragments of text.
+% cite chomsky as decrying "linear order" in text, and then brush it off
+Previous work in learning features for words has operated in the
+paradigm of language modeling, and the features they learn are
+interesting but constrained (c.f. related work).
+The main drawback is that these representations do not allow generalization
+across syntactic category.
+This ability is paramount to modeling events because they can be described
+in a wide variety of syntactic realizations.
+Take Figure \ref{eventDesc} for example, which gives three descriptions of a wedding,
+and note that
+1) there is no clear syntactic correspondence between the descriptions
+and 2) a good amount of information is captured near the event's trigger word in each case.
+
+\begin{figure*}[ht]
+\begin{tabular}{ | l | l | l | l | }
+\hline
+phrase & event trigger category & ARG0 category & ARGM category \\
+\hline
+Jane's joyous wedding ... & N & NN\$ & ADJ \\
+Everyone was joyous when Jane got married & V & NN & ADJ \\
+Jane joyously gave her vows & V+N & NN & ADV \\
+\hline
+\end{tabular}
+\caption{three syntactically disparate descriptions of the same event}
+\label{eventDesc}
+\end{figure*}
 
 
-\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1/2 page
+The claim is not that arguments are always close, but
+that they are biased towards being close\footnote{Grice's Maxim of Manner suggests
+that the speaker should be brief. If the speaker is to be both brief and informative,
+related concepts must appear close together.}
+and when they are not close, the intervening words are not
+systematically idiosyncratic to the event's trigger word.
 
+Thus we are beginning to describe a statistical theory of coherence
+based on locality of predicate and argument trigger words.
+What remains is to define mathematically how this coherence should be modelled.
 
-\section{What we want to learn} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1/2 page
-- vectors for events
-	- syntax agnostic
-- these vectors should somehow explain the vectors for words that are used to describe these events
-	- need to ground out in language modeling, where most of our training data is
-- hypothesis:
-	- events, as concepts that occur in our brains, if modelled, help explain language modeling data
-	- we can match up word representations to event representations using a syntactic (or related) transformation
+% don't need to describe 1) below, 2) more naturally falls out of this setup
 
+% separate ideas to add
+% "I believe there is regularity in how arguments are mentioned near an event trigger"
+% though, event triggers can be nominal or verbal
+% since NNLM is overly sensitive to syntax, i want to capture the regularity in event triggers
+% two ways to do it:
+% 1) learn (non-)linear projection from nom(event) => verb(event)
+% 2) model events and have nom(event) = event + nom, verb(event) = event + verb
+% i opted for 2. the params learned for nom and verb are nonlinear in the score function
 
 \section{Model and Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1/2 page
@@ -191,7 +237,22 @@ Training was run using a variant of batched stochastic gradient descent called A
 
 
 
-\section{What we can learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1/2 page
+% TODO maybe put this at the end?
+
+
+
+
+
+\section{Results} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% 1/2 page
+
+
+
+
+
+\section{What we can learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % 1 page
 - information in distant words is tied
 	i,j,k : same-window(i,j) and same-window(j,k) => tied(i,k)
