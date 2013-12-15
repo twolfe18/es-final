@@ -64,14 +64,17 @@ and note that
 1) there is no clear syntactic correspondence between the descriptions
 and 2) a good amount of information is captured near the event's trigger word in each case.
 
+% TODO some will quibble over the slight semantic differences in these examples
+% rebut this by saying that while Jane being joyous is not the same as the wedding being
+% 
 \begin{figure*}[ht]
 \begin{tabular}{ | l | l | l | l | }
 \hline
 phrase & event trigger category & ARG0 category & ARGM category \\
 \hline
-Jane's joyous wedding ... & N & NN\$ & ADJ \\
-Everyone was joyous when Jane got married & V & NN & ADJ \\
-Jane joyously gave her vows & V+N & NN & ADV \\
+Jane's joyous wedding & NN & NNP+POS & JJ \\
+Jane was joyous when she got married & VB & NNP+PRP & JJ \\
+Jane joyously gave her vows & VBD+PRP\$+VBZ & NNP & RB \\
 \hline
 \end{tabular}
 \caption{three syntactically disparate descriptions of the same event}
@@ -90,19 +93,18 @@ Thus we are beginning to describe a statistical theory of coherence
 based on locality of predicate and argument trigger words.
 What remains is to define mathematically how this coherence should be modelled.
 
-% don't need to describe 1) below, 2) more naturally falls out of this setup
-
-% separate ideas to add
-% "I believe there is regularity in how arguments are mentioned near an event trigger"
-% though, event triggers can be nominal or verbal
-% since NNLM is overly sensitive to syntax, i want to capture the regularity in event triggers
-% two ways to do it:
-% 1) learn (non-)linear projection from nom(event) => verb(event)
-% 2) model events and have nom(event) = event + nom, verb(event) = event + verb
-% i opted for 2. the params learned for nom and verb are nonlinear in the score function
 
 \section{Model and Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1/2 page
+
+% - rami's model as first stab as coherence
+%	"before contiuing to syntax-free coherence, lets first discuss syntax dependent conherence
+%	model that gives us a way to train on raw text
+%	mention perturb
+% - discuss syntactic problems, how we wont capture Figure 1
+% - concept + syntax version of rami's model
+%	revisit perturb
+
+
 A primary goal of this work is to learn from unannotated text and
 the simplest way to do this is via language modeling, i.e. inducing
 a score or probability distribution over word sequences.
@@ -120,48 +122,14 @@ First, we will describe the model we are extending, that of \cite{rami}.
 - low (64) dimensional vectors for every word (appearing at least 100 times)
 % TODO
 
-% this likely has to go
-% it seems that I'm fitting my argument to the vectors not the other way around!
-% the idea of softening formal semantics for a "dumb" learner has promise, but you need real examples
-\subsection{Concepts vs Semantics}
-Given a model of coherence, we wish to untie the model's notion of syntactic
-and semantic, or perhaps more appriately, {\em conceptual} coherence.
-From now on we will talk about the concept of a word rather than its ``semantics"
-for a few reasons. First, the properties of a word that we want to refer to do
-not constitute a semantic representation in any formal sense, but rather encode
-properties of a ``concept" that may be useful in a formal semantics.
-For example, if we wanted to say that ``wedding" and ``marry" are conceptually
-similar, because for instance, they can be used when describing the same event,
-we would not want to constrain ourselves any formal semantic expression between
-the two words. The urge to refine ``concepts" into pieces of a formal semantic theory
-are appealing to a theoretician (for example for falsifiability purposes), but are
-dispreferred from a learning perspective because they might place an unreasonably high
-burden on the statistical learner\footnote{the analogy to teaching a human might be that
-if you are teaching a student physics, it is best to start with the theory of
-Newtonian physics and work your way up to General Relativity rather than insist from
-day 1 that space-time is non-Euclidean}.
-For example we might also want to argue that the concepts for ``own" and ``purchase"
-are related because for someone to own a thing the almost certainly had to purchase it.
-This is different from the relationship between ``wedding" and ``marry", but a notion
-of similarity that ties both of these pairs together can be useful in explaining
-event coreference.
 
-\subsection{Untying Conceptual and Syntactic Coherence}
-The training regime will mean that our model must be able to distinguish
-between syntactically malformed phrases from correct ones,
-so we cannot ignore modeling syntax.
-However, on the assumption that we want to have a representation
-for every word, we want each word to efficiently represent its
-syntactic properties because we believe that bits in our representation are scarce.
-This might be in terms of statistical estimation efficiency (more bits mean that we need more data to fit them), 
-or computational estimation efficiency (more bits means running our optimization proceedure will take longer).
+%we want each word to efficiently represent its
+%syntactic properties because we believe that bits in our representation are scarce.
+%This might be in terms of statistical estimation efficiency (more bits mean that we need more data to fit them), 
+%or computational estimation efficiency (more bits means running our optimization proceedure will take longer).
 
 
-% I'm going to need to revist the proportions of attention i want to spend
-% and how i'm going to weave together the very general with the implementation
-% details, but I should get down some implementation details.
 \subsection{Nuts and Bolts}
-% mention NOMLEX!
 To facilitate learning conceptual properties as distinct from syntactic ones,
 we parameterize our model with two matrices, $W$ and $S$.
 The rows of thse matrices will catpure the properties we want to learn.
@@ -237,39 +205,27 @@ Training was run using a variant of batched stochastic gradient descent called A
 
 
 
-\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1/2 page
-% TODO maybe put this at the end?
+
+
+
+\section{Evaluation} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+- pool all nomlex entries (which are words with POS)
+	lookup their C+S representation
+	for each pair (n,v):
+		sort all items by $dist(c(n), \cdot)$
+		compute rank of c(v) in this list
+	show a few of these nearest neighbor lists (include syntax dependent versions too)
+
+	compare this method to regular unsupervised + leave one out training of a non-linear projection of n->v
+
+- compare learning curves for C+S model vs plain W model
+
+- predict event type leave one out
 
 
 
 
-
-\section{Results} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1/2 page
-
-
-
-
-
-\section{What we can learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% 1 page
-- information in distant words is tied
-	i,j,k : same-window(i,j) and same-window(j,k) => tied(i,k)
-	not clear how strong this is
-- scalar adjectives (deMarneffe)
-- relations on nominals (Mikolov)
-
-- if windows are wide enough and we have enough bits
-	- then human's solution is feasible
-	- what i mean is that we are trying a task that is not ill-posed
-		- like "predict tomorrows stock prices from last year's weather forecasts"
-
-- parsing is possible in a neural net
-	- just need a series of maxs, just like CRF parsing
-
-
-\section{What we can't/won't learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{What we can't/won't learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \label{section:unlearnability}
 % 1 page
 - we are not modeling anything at the *instance* level, only type level
@@ -298,6 +254,26 @@ Training was run using a variant of batched stochastic gradient descent called A
 	- check, i think Mikolov did this
 - use bags of words related to an event with an intruder
 
+
+\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+- scalar adjectives (deMarneffe)
+- relations on nominals (Mikolov)
+
+compare to Mikolov CBOW and other bag of words methods and say that
+what they get at is the same thing:
+removing order means that they are really working with conceptual coherence
+(and removing a lot of the syntactic requirements for coherence)
+BUT, not *all* information in the syntax/order is irrelevant!
+subj is usually ARG0
+arg swapping "man bites dog" vs "dog bites man"
+scope "every boy loves some girl" vs "some boy loves every girl"
+prepositions "gave him the ball" == "gave the ball to him" (BoW gets this actually)
+noun-noun compounds "foutain pen" vs "pen foutain"
+how to learn passive alternation? "john killed" vs "john was killed"
+
+\section{Conclusion} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% TODO
+write this
 
 
 
