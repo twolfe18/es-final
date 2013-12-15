@@ -1,4 +1,8 @@
 
+http://nlp.stanford.edu:8080/corenlp/process
+http://www.ling.upenn.edu/courses/Fall_2003/ling001/penn_treebank_pos.html
+
+
 
 ==== Motivation ====
 1/2 page

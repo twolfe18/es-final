@@ -4,7 +4,8 @@
 \usepackage{latexsym}
 \setlength\titlebox{6.5cm}
 
-\title{Final Project for Event Semantics}
+\title{Word Vector Representations for \\
+Syntactically Disparate Event Descriptions}
 
 \author{Travis Wolfe\\
 	    Johns Hopkins University \\
@@ -16,7 +17,16 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-  I need to write an abstract.
+In this work we present an unsupervised method for
+learning word vector representations that are conducive to
+identifying coreferent mentions of events. This is a hard problem
+because event mentions are weakly tied to syntax and
+can be realized in may ways.
+We discuss the justifications for a model that decomposes
+coherence into syntactic and conceptual aspects and
+provide a training proceedure for it.
+An evaluation framework is provided but without results due
+to difficulty with numerical optimization and lack of time.
 \end{abstract}
 
 
@@ -103,7 +113,6 @@ What remains is to define mathematically how this coherence should be modelled.
 % - discuss syntactic problems, how we wont capture Figure 1
 % - concept + syntax version of rami's model
 %	revisit perturb
-
 
 A primary goal of this work is to learn from unannotated text and
 the simplest way to do this is via language modeling, i.e. inducing
@@ -244,32 +253,73 @@ Training was run using a variant of batched stochastic gradient descent called A
 
 
 \section{Improvements}
+
 - train on dependency parses (not low resource)
 	- teaches you selectional preferences, but no better than the parser was!
+
 - train on consecutive verbs or subjects
 	- teaches you about discourse
 	- the event described before and after an event is likely to be relevant (e.g. scripts)
-- use a recurrent NN to get something like an HMM
-	- an attempt to get over narrow windows
-	- check, i think Mikolov did this
+
 - use bags of words related to an event with an intruder
 
 
-\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-- scalar adjectives (deMarneffe)
-- relations on nominals (Mikolov)
 
-compare to Mikolov CBOW and other bag of words methods and say that
-what they get at is the same thing:
-removing order means that they are really working with conceptual coherence
-(and removing a lot of the syntactic requirements for coherence)
-BUT, not *all* information in the syntax/order is irrelevant!
-subj is usually ARG0
-arg swapping "man bites dog" vs "dog bites man"
-scope "every boy loves some girl" vs "some boy loves every girl"
-prepositions "gave him the ball" == "gave the ball to him" (BoW gets this actually)
-noun-noun compounds "foutain pen" vs "pen foutain"
-how to learn passive alternation? "john killed" vs "john was killed"
+
+\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+Work in neural representations and language models has a long history
+\cite{foundation1,foundation2,foundation3} inter alia,
+and has only recently regained a lot of attention.
+
+% - scalar adjectives (deMarneffe)
+
+% collobert and weston
+\cite{DBLP:conf/icml/CollobertW08} built a multi-task NLP system based
+on vector representation models which was trained to predict NER tags,
+chunknings, and semantic role labelings. The SRL task is the most relevant
+to this work, but their training proceedure was fully supervised and
+is differs greatly from this work.
+
+% turian
+\cite{turian} showed that features learned by
+a few vector representation models improved the state of the art in NER tagging and chunking.
+
+
+\cite{MikolovYZ13} analyzed the representations learned using
+a recurrent neural network language model described in \cite{DBLP:conf/interspeech/KombrinkMKB11}
+which was initially created to aid in machine translation.
+\cite{MikolovYZ13} however showed that the representations learned by the
+language model were not only very good for that task, but also for the
+task of analogy completion, which was one of the tasks in SemEval 2012 \cite{semeval2012}.
+
+\cite{rami} presented a discriminatively trained feedforward neural network
+which induces representations with similar properties to those learned using
+a probabilistic language models, but with greatly accelerated training.
+This model achieved state of the art part of speech tagging accuracy (or near it)
+for many languages given only a very small labeled training set and the representations
+learned on unlabelled data.
+\cite{DBLP:journals/corr/abs-1301-3781} also focussed on efficient training and
+proposed a similar model that sums rather than concatenates the input vectors,
+and another that is just the reverse prediction task with the same network structure
+(predict neighboring words from central word instead of central word from neighboring words).
+The representations worked very well at analogies that represent specific lexical shifts
+like pluralization (e.g. ``dog" : ``dogs" :: ``cat" : ``cats"), superlativization
+(e.g. ``easy" : ``easiest" :: ``lucky" : ``luckiest"), and
+capital cities (e.g. ``Athens" : ``Greece" :: ``Oslo" : ``Norway").
+Their best model got 50.0\% accuracy on these tasks, but only one of the analogy types
+reflected a change in syntactic category, which was between adjectives and adverbs.
+
+%compare to Mikolov CBOW and other bag of words methods and say that
+%what they get at is the same thing:
+%removing order means that they are really working with conceptual coherence
+%(and removing a lot of the syntactic requirements for coherence)
+%BUT, not *all* information in the syntax/order is irrelevant!
+%subj is usually ARG0
+%arg swapping "man bites dog" vs "dog bites man"
+%scope "every boy loves some girl" vs "some boy loves every girl"
+%prepositions "gave him the ball" == "gave the ball to him" (BoW gets this actually)
+%noun-noun compounds "foutain pen" vs "pen foutain"
+%how to learn passive alternation? "john killed" vs "john was killed"
 
 \section{Conclusion} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % TODO
@@ -281,3 +331,10 @@ write this
 \bibliographystyle{plain}
 
 \end{document}
+
+
+
+
+
+
+
