@@ -154,7 +154,10 @@ The problem with this method is that you will learn that ``marry" and
 ``wedding" are very dissimilar. The reason for this is that they are from
 different syntactic categories and you would never use one as a direct replacement
 for the other.
-If we want a more general notion of similarity, or in this case (type-level) event coreference,
+If we want a more general notion of similarity, or in this case type-level event
+coreference\footnote{type-level event coreference in the sense that instances may
+not be coreferent, the phrase ``John married Mary" describes a different event from
+``John and Mary's wedding", but holding the all of the arguments constant, coreference holds.},
 then we need to relax the assumption of replacability in a sequence of words with
 a less syntax dependent notion of coherence.
 
@@ -174,25 +177,80 @@ between event descriptions. For example we might want to learn a transformation
 on our vector space that takes the vector for ``marry" (in the verbal part
 of the space) to a vector near ``marriage" (in the nominal part of the space).
 
-To test this, we look to NOMLEX
-performance is bad
+% test on NOMLEX, performance is bad
+We tested the plausibility of a model like this by trying to learn this type
+of transformation on labelled pairs of nominal and verbal trigger words for events
+like ``testament" and ``testify". This data was taken from NOMLEX \cite{nomlex},
+which provides us with 3,135 noun-verb pairs.
+We took the embeddings of \cite{rami} and tried to learn a linear map that minimized
+the Euclidean distance between the vector representation for the noun and the
+projected vector for the verb:
+\[
+	\min_P \sum_{(n,v) \in \mbox{\texttt{NOMLEX}}}
+		|| x_n - P x_v ||_2^2
+\]
 
-On closer inpsection it doesn't seem like this would work on account of polysemy.
-% empirically this doens't work, i tried it with NOMLEX pairs (figure out error measure)
-% this is not wanted on account of polysemy
-% Ax = b or c
-% but A admits composition, so A'Ax = could be two things?
+When we compared the error of this model (on training data), it
+was not substantially lower than the variance from the mean of the nominal vectors,
+$\sum ||x_n - E[x_n]||_2^2$, which indicates that this model has no hope
+of relating this data in an accurate way. Nonlinear transforms were no attempted
+due to the size of the data and the apparent difficulty of the mapping.
 
 
-We then might return to our original model of coherence, but try to force
-the vectors we learn for words to be less syntax dependent.
-% project
-% compose
+% shouldn't work anyway
+On second inpsection it doesn't seem like this method of projection would work for a few reasons.
+First, since the word representations have not been preprocessed for polysemy, projection is much harder than
+it would be if we assumed that we were projecting a centroid in some conceptual space\footnote{this
+is assuming that the values in a word vector can represent either a point in space (a.k.a. a centroid)
+or a distribution like one that you might get out of a feature vector in a log-linear model}.
+If a word vector needs to store two meaning, e.g. ``testament" as in ``old" or as in what you do in court,
+then the projection would need to preserve this polysemy, and in a way that represents the
+syntactic category the word appears in, even if that notion might be null in some sense
+(e.g. there is no verb that corresponds to the ``old testament" sense of ``testament" because it is not an event).
+%also instance level info
 
+
+We then might return to our simpler model of coherence,
+but try to force the vectors we learn for words to be less syntax dependent.
+%One reason benefit of this model is that it can solve the polysemy problem by putting more
+%infromation in the hidden layer via a weak form of composition\footnote{you
+%might imagine weights leading into the hidden layer implementing a (soft)max
+%over possible compositions}. 
+We can do this by separately modeling the syntactic and conceptual aspects separately.
+Lets define a word vector $v_i$ to be a composition of a vector representing its
+syntactic properties $s_i$ and its non-syntactic properties $w_i$, $v_i = s_i \oplus w_i$.
+As before, we will build up a phrase vector $x$ by stacking the words in a phrase,
+$x = [v_{i-k}, ..., v_i, ..., v_{i+k}]$, for some small context size $k$.
+We want to come up with a way of learning $s_i$ in a way that will favor syntax and
+be tied between various words (else we have something that is equivalent to the first model),
+so we will represent $s_i$ as a row in a matrix $S_{t(i),\bullet}$,
+where $t(i)$ is the part of speech tag of word $i$. In principle $t(i)$ could be more
+fine grained than a part of speech tag, but it should be easily determined by surface
+forms of the text so that it can be used on large unlabelled datasets.
+
+With regard to how $\oplus$ should be implemented, we could use multiplication,
+additions, or some other operator, but we favor vector stacking because it
+implies that there are dimensions that account for syntactic versus semantic
+coherence, a distinction which we intuitively believe to exist.
+%First, vector stacking encodes the belief that syntax is a distinct property
+%of words from their idiosyncratic meaning. % TODO support this
+%Second, they are computationally more appealing because it 
 
 
 
 \section{Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+To train our model, we sought a large dataset that has many mentions of events,
+so we opt for a corpus comprised of newswire text taken from the New York Times,
+a part of the Annotated Gigaword dataset \cite{agiga}, ranging from 2000 to 2004.
+This yields a dataset with 153,762 unique words and 456,746,432 phrases.
+Given this corpus, we first give every word that appears at least 100
+times an index and label all other words as \texttt{OOV}\footnote{we will learn
+one vector for \texttt{OOV} even though there are many \texttt{OOV} words}.
+Numbers are replaced by a unique token that only says how many digits are in
+the token\footnote{e.g. ``120" $\rightarrow$ \texttt{3D} and ``1995" $\rightarrow$ \texttt{4D}}.
+We then break text up in windows of size 5 ($k=2$) and shuffle all of the instances.
+
+
 The corruption model affects the parameters we learn.
 We follow \cite{rami} in that we only corrupt the middle word of the language model,
 but we still have to decide whether to corrupt the word, its part of speech tag, or both.
@@ -213,17 +271,6 @@ A careful implementation could do this efficiently, but that is not in the scope
 The method used in this paper only requires a few bits of entropy and no memory accesses.}.
 
 
-
-Given a large corpus, we first give every word that appears at least 100
-times an index and label all other words as \texttt{OOV}\footnote{we will learn
-one vector for \texttt{OOV} even though there are many \texttt{OOV} words}.
-Numbers are replaced by a unique token that only says how many digits are in
-the token\footnote{e.g. ``120" $\rightarrow$ \texttt{3D} and ``1995" $\rightarrow$ \texttt{4D}}.
-We then break text up in windows of size 5 ($k=2$) and shuffle all of the instances.
-
-Our dataset was the New York Times part of the Annotated Gigaword dataset \cite{agiga},
-ranging from 2000 to 2004. This yields a dataset with 153,762 unique words and 
-456,746,432 phrases.
 
 The feedforward network was implemented in Theano \cite{theano},
 a python library which provides automatic differentiation and support for GPU computing.
@@ -284,6 +331,7 @@ Training was run using a variant of batched stochastic gradient descent called A
 
 - use bags of words related to an event with an intruder
 
+- adaptive corruption (more plausible interlopers)
 
 
 
