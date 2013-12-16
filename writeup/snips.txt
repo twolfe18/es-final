@@ -1,0 +1,81 @@
+% - what are concepts? why use a vague notion instead of a formal semantics?
+%	ad hoc representation for statistical learning
+%	generalize predicates/events and arguments/entities
+%	they are one step up from words (by definition)
+%		this paper defines concepts as stripping off syntactic category
+%		but you could strip off more if you had more labels
+%		e.g. tense, plurality, gender, animacy
+%		the residual of things that are easily predictable from surface forms are "concepts"
+%	GAH! concepts are a trap! stop writing about them!
+
+% this likely has to go
+% it seems that I'm fitting my argument to the vectors not the other way around!
+% the idea of softening formal semantics for a "dumb" learner has promise, but you need real examples
+\subsection{Concepts vs Semantics}
+Given a model of coherence, we wish to untie the model's notion of syntactic
+and semantic, or perhaps more appriately, {\em conceptual} coherence.
+From now on we will talk about the concept of a word rather than its ``semantics"
+for a few reasons. First, the properties of a word that we want to refer to do
+not constitute a semantic representation in any formal sense, but rather encode
+properties of a ``concept" that may be useful in a formal semantics.
+For example, if we wanted to say that ``wedding" and ``marry" are conceptually
+similar, because for instance, they can be used when describing the same event,
+we would not want to constrain ourselves any formal semantic expression between
+the two words. The urge to refine ``concepts" into pieces of a formal semantic theory
+are appealing to a theoretician (for example for falsifiability purposes), but are
+dispreferred from a learning perspective because they might place an unreasonably high
+burden on the statistical learner\footnote{the analogy to teaching a human might be that
+if you are teaching a student physics, it is best to start with the theory of
+Newtonian physics and work your way up to General Relativity rather than insist from
+day 1 that space-time is non-Euclidean}.
+For example we might also want to argue that the concepts for ``own" and ``purchase"
+are related because for someone to own a thing the almost certainly had to purchase it.
+This is different from the relationship between ``wedding" and ``marry", but a notion
+of similarity that ties both of these pairs together can be useful in explaining
+event coreference.
+
+%we want each word to efficiently represent its
+%syntactic properties because we believe that bits in our representation are scarce.
+%This might be in terms of statistical estimation efficiency (more bits mean that we need more data to fit them), 
+%or computational estimation efficiency (more bits means running our optimization proceedure will take longer).
+
+
+
+
+
+To facilitate learning conceptual properties as distinct from syntactic ones,
+we parameterize our model with two matrices, $W$ and $S$.
+The rows of thse matrices will catpure the properties we want to learn.
+Our model will define the vector for word $i$ with syntactic tag $t(i)$
+as the concatenation of $W_{i,\bullet}$ and $S_{t(i),\bullet}$ and refer to it as $v_i$.
+The syntactic tag information is what allows this model to separate the conceptual
+and syntactic properties. For this work, we will use part of speect tags because
+they are easy to aquire in a relatively low-resource setting \cite{pos},
+but you could easily extend these tags to be more informative provided
+the cardinality of the tagset is not too large or a provided a factorized representation is used.
+% TODO are "conceptual" properties just residual of syntactic properties?
+
+The model of coherence will take a phrase $x = [v_{i-k}, ..., v_i, ..., v_{i+k}]$,
+concatenate all of the word representations into a very tall vector, and then score it
+with a nonlinear function
+\[
+	s(x) = p^t \cdot \tanh( A \cdot x + b )
+\]
+where $b$ is a vector of offsets,
+$\tanh$ operates element-wise over the affine transformation of the stacked phrase vector,
+and $p$ projects the resulting vector down to a real value.
+Scoring functions of this form are universal function approximators
+provided $A$ is of sufficient dimension\cite{Hornik:1989}.
+
+% perturb, margin
+In order to train our coherence (language) model efficiently, we rely on
+the discriminative training method proposed in \cite{rami} which is based
+on random perturbations of observed data. The idea is you take a phrase $x$
+and create a copy which is slighly corruped $\tilde{x}$. Given this pair,
+we want to learn parameters so that $s(x) \ge s(\tilde{x}) + 1$.
+The intuition is that our model will learn to score coherent phrases highly
+and incoherent ones lowly.
+
+
+
+

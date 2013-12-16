@@ -1,0 +1,37 @@
+
+1. figure out coherent skeleton that includes basics that must be in there
+2. flesh out this skeleton (might be short of 4 pages)
+3. with this form set, add on new things to talk about (don't extend existing ones!)
+
+
+* description of problem (events != syntax)
+* description of solution part 1: we haven't separated out syntax
+* description of solution part 2: separation
+* remaining training details
+* evaluation: what can we learn
+* analysis: what can't we learn
+* improvements
+* related work
+
+
+- you can get at most a depth 2 parse using 1 hidden layer
+	for 5 word windows this is enough
+	5x -> (x 4x)
+	5x -> (2x 3x)
+	4x -> (x 3x)
+	4x -> (2x 2x)
+	3x -> (x 2x)
+	2x -> (x x)
+	
+	hidden layer represents preterminals
+	works with > binary branching
+		binary you might have to flatten some constituents...
+
+- assumption of ability to observe pred/arg binding locally (5 words) can be tested!
+	- think of predicates that have local binding and some that have long dist
+	- look at the model's loss for when uncorrupted version are these words
+	- you could do human evaluation with long distance dependences
+		which we know humans can get
+		but this is less fair to the model (it can't even observe them)
+		the more fair (and harsh if it fails) experiment is just model loss
+

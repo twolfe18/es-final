@@ -26,7 +26,7 @@ We discuss the justifications for a model that decomposes
 coherence into syntactic and conceptual aspects and
 provide a training proceedure for it.
 An evaluation framework is provided but without results due
-to difficulty with numerical optimization and lack of time.
+to difficulty with numerical optimization.
 \end{abstract}
 
 
@@ -34,26 +34,25 @@ to difficulty with numerical optimization and lack of time.
 \section{Introduction}
 % 1 page
 %%% GENERAL
-- we want *some* account of learning
-	- linguistic work we read takes "the lexicon" as given, and it's not
-	- NLP is based on experts
-	- people who learn a language do not need an expert, so *some* systems can do it without experts
-	- whether or not humans come "preprogrammed" with the special sauce for learning language is an open question
-	- but a system that can learn from nothing but bare data is highly desireable
-
-- features suck
-	- in NLP we have experts write down features that rarely come close to human performance
-	- this mismatch means that there is something in our heads that didn't make it into the features
-	- features fail to generalize: accross tasks, across languages
-	- features are not egalitarian! high resource languages are the only ones that receive attention
-
-- embeddings are somewhat neurally plausible
-	- they are a simplification, but a much more natural fit than logic to the brain
+Knowledge representations for language has been given many different treatments.
+Much linguistic work ignores the problem of learning, or sometimes even specifying
+the representation of knowledge on which they study linguistic regularities.
+In NLP representations are often comprised of ad hoc feature vectors which are
+only available as long as there is an expert able to write features.
+These features are often task specific and difficult to come up with.
+Connectionists seek unification between the study of the neural representations
+of humans with practical tasks in NLP.
+This work most closesly follows the connectionist track in trying to learn
+vector representations for words that allow us to make predictions about more
+abstract concepts in linguistics, like events and entities.
+%We are not concerned with absolute adherence to neural properties of people,
+%but rather with proposing a representation that is plausibly similar to a neural one
+%and with showing how you might learn it.
 
 %%% EVENTS
-Turning more specifically to events and their descriptions,
-we aim to utilize unsupervised feature learning in order to
-come up with representations of events.
+We offer a simple model of words which decomposes into conceptual properties
+of the predicates and arguments they evoke/describe and syntactic properties
+of the words themselves.
 As is generally true with unsupervised learning, you cannot learn
 things that are not present in the data, so this goal of learning event
 representations comes hand in hand with a hypothesis about the
@@ -97,14 +96,14 @@ that they are biased towards being close\footnote{Grice's Maxim of Manner sugges
 that the speaker should be brief. If the speaker is to be both brief and informative,
 related concepts must appear close together.}
 and when they are not close, the intervening words are not
-systematically idiosyncratic to the event's trigger word.
+systematically idiosyncratic to the event/predicate being described.
 
 Thus we are beginning to describe a statistical theory of coherence
 based on locality of predicate and argument trigger words.
 What remains is to define mathematically how this coherence should be modelled.
 
 
-\section{Model and Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\section{Model} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % - rami's model as first stab as coherence
 %	"before contiuing to syntax-free coherence, lets first discuss syntax dependent conherence
@@ -118,7 +117,7 @@ A primary goal of this work is to learn from unannotated text and
 the simplest way to do this is via language modeling, i.e. inducing
 a score or probability distribution over word sequences.
 Previous work has shown that we can learn very fine grained information
-by inducing features for a language model.
+by inducing features for a language model (c.f. related work).
 While previous work has referred to this as language modelling,
 this has the unwanted connotation that we are interested in the
 numerical scores that come out of the language model for some NLP task.
@@ -127,51 +126,73 @@ and we'll discuss the factors that lead to coherence and how we might learn them
 Later \ref{section:unlearnability}, we'll discuss ways in which our model of coherence
 fails as a general explanation of coherence and how we might improve it.
 
-First, we will describe the model we are extending, that of \cite{rami}.
-- low (64) dimensional vectors for every word (appearing at least 100 times)
-% TODO
+Lets start with a simple model of coherence where we look at a small phrase of words
+and decide if it is coherent. Since we don't know, or rather want to learn, how words
+collocate and compose, we will impose very few restrictions on how the words might
+interact in determining coherence. Lets use a single hidden layer neural network to
+describe this process of determining coherence. The inputs to the network will be one
+vector for every word in the phrase and the output will be a coherence score
+(which we will refer to as $s(\cdot)$).
+The hidden layer in the middle will store some notion of non-linear composition,
+but we will not assume we know how to parse.
+
+This network has the nice property that we can propagate a gradient all the
+way from the output score back to the values in the word vectors.
+We can then learn features for words by training the network to accomplish
+a disciminative task that looks like comprehension.
+Given a phrase $x$ and a slightly corrupted (and hence incoherent) phrase $\tilde{x}$,
+we want to train our model to recognize that the score of the uncorrupted prhase
+is more coherent than the corrupted one: $s(x) \ge s(\tilde{x}) + 1$.
+This training proceedure, provided we can get coherent phrases and an automatic method of
+corruption, means that we can train on as much unlabelled training data as we have.
+
+The model just described closely resembles the model of \cite{rami}, and
+can learn fine grained (seemingly) semantic similarities like ``Apple" is
+similar to ``Dell" if you take similarity to mean cosine distance of the
+vectors learned for ``Apple" and ``Dell".
+The problem with this method is that you will learn that ``marry" and
+``wedding" are very dissimilar. The reason for this is that they are from
+different syntactic categories and you would never use one as a direct replacement
+for the other.
+If we want a more general notion of similarity, or in this case (type-level) event coreference,
+then we need to relax the assumption of replacability in a sequence of words with
+a less syntax dependent notion of coherence.
+
+One way to do this is to remove the order of the words in the sequence
+(this is used in the CBOW method of \cite{DBLP:journals/corr/abs-1301-3781}),
+but this throws the baby out with the bathwater. With no order you cannot
+tell the differnce between ``dog bites man" and ``man bites dog", and surely
+you would learn a different conception of ``biting" if you thought people went
+around doing it to dogs.
+A more general way to state this is that syntax plays a role in semantic interpretation,
+and we should not remove it entirely from our model of coherence.
+
+Another way is to consider that words that describe events that have
+different syntactic category live in different places of the vector space
+we are learning our representation in, but that there is some kind of mapping
+between event descriptions. For example we might want to learn a transformation
+on our vector space that takes the vector for ``marry" (in the verbal part
+of the space) to a vector near ``marriage" (in the nominal part of the space).
+
+To test this, we look to NOMLEX
+performance is bad
+
+On closer inpsection it doesn't seem like this would work on account of polysemy.
+% empirically this doens't work, i tried it with NOMLEX pairs (figure out error measure)
+% this is not wanted on account of polysemy
+% Ax = b or c
+% but A admits composition, so A'Ax = could be two things?
 
 
-%we want each word to efficiently represent its
-%syntactic properties because we believe that bits in our representation are scarce.
-%This might be in terms of statistical estimation efficiency (more bits mean that we need more data to fit them), 
-%or computational estimation efficiency (more bits means running our optimization proceedure will take longer).
+We then might return to our original model of coherence, but try to force
+the vectors we learn for words to be less syntax dependent.
+% project
+% compose
 
 
-\subsection{Nuts and Bolts}
-To facilitate learning conceptual properties as distinct from syntactic ones,
-we parameterize our model with two matrices, $W$ and $S$.
-The rows of thse matrices will catpure the properties we want to learn.
-Our model will define the vector for word $i$ with syntactic tag $t(i)$
-as the concatenation of $W_{i,\bullet}$ and $S_{t(i),\bullet}$ and refer to it as $v_i$.
-The syntactic tag information is what allows this model to separate the conceptual
-and syntactic properties. For this work, we will use part of speect tags because
-they are easy to aquire in a relatively low-resource setting \cite{pos},
-but you could easily extend these tags to be more informative provided
-the cardinality of the tagset is not too large or a provided a factorized representation is used.
-% TODO are "conceptual" properties just residual of syntactic properties?
 
-The model of coherence will take a phrase $x = [v_{i-k}, ..., v_i, ..., v_{i+k}]$,
-concatenate all of the word representations into a very tall vector, and then score it
-with a nonlinear function
-\[
-	s(x) = p^t \cdot \tanh( A \cdot x + b )
-\]
-where $b$ is a vector of offsets,
-$\tanh$ operates element-wise over the affine transformation of the stacked phrase vector,
-and $p$ projects the resulting vector down to a real value.
-Scoring functions of this form are universal function approximators
-provided $A$ is of sufficient dimension\cite{Hornik:1989}.
 
-% perturb, margin
-In order to train our coherence (language) model efficiently, we rely on
-the discriminative training method proposed in \cite{rami} which is based
-on random perturbations of observed data. The idea is you take a phrase $x$
-and create a copy which is slighly corruped $\tilde{x}$. Given this pair,
-we want to learn parameters so that $s(x) \ge s(\tilde{x}) + 1$.
-The intuition is that our model will learn to score coherent phrases highly
-and incoherent ones lowly.
-
+\section{Learning} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 The corruption model affects the parameters we learn.
 We follow \cite{rami} in that we only corrupt the middle word of the language model,
 but we still have to decide whether to corrupt the word, its part of speech tag, or both.
