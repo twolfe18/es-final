@@ -246,6 +246,7 @@ class WindowReader:
 			self.phrase_mat = np.array(list(self.get_int_lines()))
 		return self.phrase_mat
 
+
 class NumpyWindowReader:
 	def __init__(self, filename):
 		self.filename = filename
@@ -256,7 +257,9 @@ class NumpyWindowReader:
 			self.cache = np.load(self.filename)
 		return self.cache
 
+
 class MultiWindowReader:
+	""" provide multiple files and this will read from all of them"""
 	
 	def __init__(self, files, oov='<OOV>'):
 		self.files = files
@@ -278,6 +281,16 @@ class MultiWindowReader:
 		return self.cache
 	
 	def num_partitions(self): return len(self.files)
+
+
+class POSWindowReader:
+	""" reads lines of the form:
+	School::NNP has::AUXZ been::VBN out::IN at::IN
+	"""
+
+	def __init__(self, filename):
+		self.filename = filename
+		self.cache = None
 
 
 class Regularizer:

@@ -3,6 +3,7 @@ import numpy as np
 import numpy.random as rand
 import sys
 import random
+import codecs, gzip
 
 
 class Trainer(object):
@@ -50,11 +51,13 @@ class Trainer(object):
 		bs = 100			# batch size
 		itr = 50			# how many batch-sized steps to take
 		print 'training for', outer_epochs, 'macro-epochs'
+		sys.stdout.flush()
 		W_dev = self.dev_phrase()
 		prev_avg_loss = 1.0
 		pi = list(range(self.num_train_phrases()))	# permutation to view train batches through
 		for epoch in range(outer_epochs):
 			print 'starting epoch', epoch
+			sys.stdout.flush()
 			improvement = False
 			for train_idx in range(self.num_train_phrases()):
 				W_train = self.train_phrase(pi[train_idx])
@@ -80,6 +83,7 @@ class Trainer(object):
 					print "[train] %s.l2=%s" % (name, param.l2)
 					print "[train] %s.lInf=%s" % (name, param.lInf)
 				print
+				sys.stdout.flush()
 
 			if not improvement:
 				break
@@ -233,6 +237,110 @@ class AdditiveTrainer(Trainer, object):
 		return p
 
 
+class FixedAdditiveTrainer(AdditiveTrainer, object):
+	""" this fixes a bug in AdditiveTrainer"""
+	
+	def __init__(self, model_dir, data_dir, k, init_params_with_dir=None):
+		super(FixedAdditiveTrainer, self).__init__(model_dir, data_dir, k, init_params_with_dir=init_params_with_dir)
+	#def __init__(self):
+		self.wordAlph = Alphabet()
+		self.posAlph = Alphabet()
+		self.k = 5
+		self.f = '/home/travis/Desktop/word-windows-5.txt.gz'
+
+		if os.path.isfile('cache/fadditive/W_train.npy'):
+			print 'loading from cache...'
+			self.W_train = np.load('cache/fadditive/W_train.npy')
+			self.W_dev = np.load('cache/fadditive/W_dev.npy')
+			self.P_train = np.load('cache/fadditive/P_train.npy')
+			self.P_dev = np.load('cache/fadditive/P_dev.npy')
+			self.wordAlph = Alphabet('cache/fadditive/wordAlph.txt')
+			self.posAlph = Alphabet('cache/fadditive/posAlph.txt')
+		else:
+			print 'reading data from', self.f
+			W, P = self.get_data(onlyTake=750000)
+			n, k = W.shape
+			i = n - 80000
+			self.W_train = W[:-i,]
+			self.W_dev = W[:i,]
+			self.P_train = P[:-i,]
+			self.P_dev = P[:i,]
+			print 'saving to cache...'
+			np.save('cache/fadditive/W_train.npy', self.W_train)
+			np.save('cache/fadditive/W_dev.npy', self.W_dev)
+			np.save('cache/fadditive/P_train.npy', self.P_train)
+			np.save('cache/fadditive/P_dev.npy', self.P_dev)
+			self.wordAlph.save('cache/fadditive/wordAlph.txt')
+			self.posAlph.save('cache/fadditive/posAlph.txt')
+
+		self.alph = self.wordAlph
+		for m, name in [(self.W_train, 'W_train'), (self.W_dev, 'W_dev'), (self.P_train, 'P_train'), (self.P_dev, 'P_dev')]:
+			print name, 'has shape', m.shape
+
+
+	def get_embedding_to_train(self, learning_rate_scale=1.0):
+		return AdditiveEmbedding(self.alph, len(self.posAlph), self.k, learning_rate_scale=learning_rate_scale)
+
+	def num_train_phrases(self):
+		return 1
+	
+	def dev_phrase(self):
+		return FeaturizedPhrase(self.W_dev, self.P_dev)
+	
+	def train_phrase(self, i):
+		return FeaturizedPhrase(self.W_train, self.P_train)
+
+	def get_data(self, onlyTake=None, reservoir=False):
+		t = time.time()
+		reservoir_cutoff = 75000
+		try: reservoir_cutoff = max(reservoir_cutoff, 2*onlyTake)
+		except: pass
+		words = []
+		pos = []
+		n = 0
+		for w, p in self.get_words_and_pos():
+			if onlyTake is not None and n >= onlyTake:
+				if reservoir:
+					i = np.random.randint(0, n)
+					if i < len(words):
+						words[i] = w
+						pos[i] = p
+				else:
+					break
+			else:
+				words.append(w)
+				pos.append(p)
+			n += 1
+			if n > reservoir_cutoff: break	# debugging
+		words = np.array(words)
+		pos = np.array(pos)
+		print 'done reading took', (time.time()-t), 'seconds'
+		return (words, pos)
+
+	def get_words_and_pos(self):
+		k = self.k
+		fd = gzip.open(self.f, 'rb')
+		r = codecs.getreader('utf-8')
+		for lineNum, line in enumerate(r(fd)):
+			try:
+				#print 'line =', line
+				words = np.zeros(k, dtype='int32')
+				pos = np.zeros(k, dtype='int32')
+				for i, tok in enumerate(line.strip().split()):
+					w, p = tok.split('::')
+					#print 'tok =', tok
+					#print 'w =', w
+					#print 'p =', p
+					words[i] = self.wordAlph.lookup_index(w, add=True)
+					pos[i] = self.posAlph.lookup_index(p, add=True)
+				#print 'words =', words
+				#print 'pos =', pos
+				yield (words, pos)
+			except:
+				pass
+		fd.close()
+
+
 
 if __name__ == '__main__':
 	
@@ -250,6 +358,12 @@ if __name__ == '__main__':
 		if len(sys.argv) > 2:
 			target = sys.argv[2]
 		t = AdditiveTrainer(target, data_dir, k, init_params_with_dir=init_with)
+		t.run()
+	elif sys.argv[1] == 'fadditive':
+		target = 'models/fadditive/'
+		if len(sys.argv) > 2:
+			target = sys.argv[2]
+		t = FixedAdditiveTrainer(target, data_dir, k, init_params_with_dir=init_with)
 		t.run()
 	else:
 		print 'i don\'t know how to handle these args', sys.argv

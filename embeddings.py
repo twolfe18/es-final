@@ -213,6 +213,7 @@ class Embedding(object):
 			#print '[train] W.l2 = ', self.params['W'].l2	# this is actually noticeably slow
 			#print '[train] A.l2 = ', self.params['A'].l2
 			#print
+			sys.stdout.flush()
 
 		return dev_loss
 
@@ -414,7 +415,7 @@ class AdditiveEmbedding(Embedding, object):
 
 		args = [word_indices, feat_indices, word_indices_corrupted, feat_indices_corrupted]
 		print 'args =', args
-		learning_rate_muting = 5.0	# higher means that only W gets updates, 1 means everything has same learning rate
+		learning_rate_muting = 2.0	# higher means that only W gets updates, 1 means everything has same learning rate
 		lrEw = learning_rate_scale
 		lrEf = learning_rate_scale
 		#lrEf = math.pow(learning_rate_muting, -0.5) * learning_rate_scale
