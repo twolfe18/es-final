@@ -369,16 +369,18 @@ class AdditiveEmbedding(Embedding, object):
 		# 1-hidden layer network
 		self.Ew = theano.shared(np.zeros((num_words, d), dtype=float_type), name='Ew')		# word embeddings
 		self.Ef = theano.shared(np.zeros((num_features, d), dtype=float_type), name='Ef')	# feature embeddings
-		self.A = theano.shared(np.zeros((k * d, h), dtype=float_type), name='A')			# word+feat => hidden
+		self.Aw = theano.shared(np.zeros((k * d, h), dtype=float_type), name='Aw')			# word => hidden
+		self.Af = theano.shared(np.zeros((k * d, h), dtype=float_type), name='Af')			# feat => hidden
 		self.b = theano.shared(np.zeros(h, dtype=float_type), name='b')						# hidden offset
 		self.p = theano.shared(np.zeros(h, dtype=float_type), name='p')						# hidden => output
 
 		self.reg = Regularizer()
-		self.reg.l2(self.Ew, 1e-6)
-		self.reg.l2(self.Ef, 1e-6)
-		self.reg.l1(self.A, 1e-5)
-		self.reg.l2(self.b, 1e-6)
-		self.reg.l1(self.p, 1e-5)
+		self.reg.l2(self.Ew, 1e-7)
+		self.reg.l2(self.Ef, 1e-7)
+		self.reg.l1(self.Aw, 1e-6)
+		self.reg.l1(self.Af, 1e-6)
+		self.reg.l2(self.b, 1e-7)
+		self.reg.l1(self.p, 1e-6)
 
 		if int_type == 'int64':
 			word_indices = T.lmatrix('word_indices')
@@ -391,8 +393,7 @@ class AdditiveEmbedding(Embedding, object):
 		phrases = phrases_tensor.reshape((n, k * self.d))
 		features_tensor = self.Ef[feat_indices]
 		features = features_tensor.reshape((n, k * self.d))
-		latent = phrases + features
-		hidden = T.tanh( T.dot(latent, self.A) + self.b )
+		hidden = T.tanh( T.dot(phrases, self.Aw) + T.dot(features, self.Af) + self.b )
 		scores = T.dot(hidden, self.p)
 
 		# score function
@@ -418,14 +419,15 @@ class AdditiveEmbedding(Embedding, object):
 		learning_rate_muting = 2.0	# higher means that only W gets updates, 1 means everything has same learning rate
 		lrEw = learning_rate_scale
 		lrEf = learning_rate_scale
-		#lrEf = math.pow(learning_rate_muting, -0.5) * learning_rate_scale
-		lrA = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
+		lrAw = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
+		lrAf = math.pow(learning_rate_muting, -1.0) * learning_rate_scale
 		lrp = math.pow(learning_rate_muting, -2.0) * learning_rate_scale
-		lrb = math.pow(learning_rate_muting, -3.0) * learning_rate_scale
+		lrb = math.pow(learning_rate_muting, -2.0) * learning_rate_scale
 		self.params = {
 			'Ew' : AdaGradParam(self.Ew, args, avg_loss, learning_rate=lrEw),
 			'Ef' : AdaGradParam(self.Ef, args, avg_loss, learning_rate=lrEf),
-			'A' : AdaGradParam(self.A, args, avg_loss, learning_rate=lrA),
+			'Aw' : AdaGradParam(self.Aw, args, avg_loss, learning_rate=lrAw),
+			'Af' : AdaGradParam(self.Af, args, avg_loss, learning_rate=lrAf),
 			'p' : AdaGradParam(self.p, args, avg_loss, learning_rate=lrp),
 			'b' : AdaGradParam(self.b, args, avg_loss, learning_rate=lrb) \
 		}
@@ -445,7 +447,8 @@ class AdditiveEmbedding(Embedding, object):
 		Initializer.set_rand_ball(self.Ef, initialization_scale * self.num_features / math.pow(self.num_words, 1.0/3.0))
 
 		# d=64,k=5,h=40 => rA=rb=0.258
-		Initializer.set_rand_ball(self.A, initialization_scale * Initializer.compute_r(d * self.k, h))
+		Initializer.set_rand_ball(self.Aw, initialization_scale * Initializer.compute_r(d * self.k, h))
+		Initializer.set_rand_ball(self.Af, initialization_scale * Initializer.compute_r(d * self.k, h))
 		Initializer.set_rand_ball(self.b, initialization_scale * Initializer.compute_r(d * self.k, h))
 
 		# h=40 => rp=0.765

@@ -196,8 +196,11 @@ class AdditiveTrainer(Trainer, object):
 			Ef = emb.params['Ef']
 			Ef.set_value( np.zeros_like(Ef.get_value(), dtype=Ef.dtype) )
 
-			A = np.load(os.path.join(self.init_params_with_dir, 'A.npy'))
-			emb.params['A'].set_value(A)
+			Af = np.load(os.path.join(self.init_params_with_dir, 'Af.npy'))
+			emb.params['Af'].set_value(Af)
+
+			Aw = np.load(os.path.join(self.init_params_with_dir, 'Aw.npy'))
+			emb.params['Aw'].set_value(Aw)
 
 			b = np.load(os.path.join(self.init_params_with_dir, 'b.npy'))
 			emb.params['b'].set_value(b)
@@ -208,7 +211,7 @@ class AdditiveTrainer(Trainer, object):
 		return emb
 
 	def params_to_report_on(self):
-		return ['Ew', 'Ef', 'A', 'p', 'b']
+		return ['Ew', 'Ef', 'Aw', 'Af', 'p', 'b']
 
 	def dev_phrase(self):
 		if self.dev is None:
