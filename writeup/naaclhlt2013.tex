@@ -2,6 +2,8 @@
 \usepackage{naaclhlt2013}
 \usepackage{times}
 \usepackage{latexsym}
+\usepackage{url}
+\usepackage{graphicx}
 \setlength\titlebox{6.5cm}
 
 \title{Word Vector Representations for \\
@@ -19,9 +21,9 @@ Syntactically Disparate Event Descriptions}
 \begin{abstract}
 In this work we present an unsupervised method for
 learning word vector representations that are conducive to
-identifying coreferent mentions of events. This is a hard problem
-because event mentions are weakly tied to syntax and
-can be realized in may ways.
+identifying coreferent mentions of events.
+This is a hard problem because event mentions are weakly
+tied to syntax and can be realized in may ways.
 We discuss the justifications for a model that decomposes
 coherence into syntactic and conceptual aspects and
 provide a training proceedure for it.
@@ -34,23 +36,27 @@ to difficulty with numerical optimization.
 \section{Introduction}
 % 1 page
 %%% GENERAL
-Knowledge representations for language has been given many different treatments.
-Much linguistic work ignores the problem of learning, or sometimes even specifying
-the representation of knowledge on which they study linguistic regularities.
-In NLP representations are often comprised of ad hoc feature vectors which are
-only available as long as there is an expert able to write features.
-These features are often task specific and difficult to come up with.
-Connectionists seek unification between the study of the neural representations
-of humans with practical tasks in NLP.
-This work most closesly follows the connectionist track in trying to learn
-vector representations for words that allow us to make predictions about more
-abstract concepts in linguistics, like events and entities.
-%We are not concerned with absolute adherence to neural properties of people,
-%but rather with proposing a representation that is plausibly similar to a neural one
-%and with showing how you might learn it.
+Knowledge representations for events in natural language has been given many different treatments.
+Much linguistic work does not conern itself with the problem of learning and
+the representation on which they study linguistic regularities.
+In NLP representations are often comprised of ad hoc feature and lists of
+trigger words which are only available as long as there is an expert able to write them.
+This data is often task specific and difficult to aquire.
+Some annotated corpora have been created with frames or propositions labelled
+in hopes that machine learning techniques might generalize this supervision to new data.
+%Connectionists seek unification between the study of the neural representations
+%of humans with practical tasks in NLP.
+%This work most closely follows the connectionist track in trying to learn
+%vector representations for words that allow us to make predictions about more
+%abstract concepts in linguistics, like events and entities.
+In this work, we propose an unsupervised model for learning event representations
+based at the lexical level based on as little supervision and as much data
+as possible.
+
+
 
 %%% EVENTS
-We offer a simple model of words which decomposes into conceptual properties
+Our model of words decomposes words into the conceptual properties
 of the predicates and arguments they evoke/describe and syntactic properties
 of the words themselves.
 As is generally true with unsupervised learning, you cannot learn
@@ -73,9 +79,6 @@ and note that
 1) there is no clear syntactic correspondence between the descriptions
 and 2) a good amount of information is captured near the event's trigger word in each case.
 
-% TODO some will quibble over the slight semantic differences in these examples
-% rebut this by saying that while Jane being joyous is not the same as the wedding being
-% 
 \begin{figure*}[ht]
 \begin{tabular}{ | l | l | l | l | }
 \hline
@@ -104,15 +107,6 @@ What remains is to define mathematically how this coherence should be modelled.
 
 
 \section{Model} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% - rami's model as first stab as coherence
-%	"before contiuing to syntax-free coherence, lets first discuss syntax dependent conherence
-%	model that gives us a way to train on raw text
-%	mention perturb
-% - discuss syntactic problems, how we wont capture Figure 1
-% - concept + syntax version of rami's model
-%	revisit perturb
-
 A primary goal of this work is to learn from unannotated text and
 the simplest way to do this is via language modeling, i.e. inducing
 a score or probability distribution over word sequences.
@@ -123,14 +117,21 @@ this has the unwanted connotation that we are interested in the
 numerical scores that come out of the language model for some NLP task.
 Instead, we'll refer to our modelling as addressing {\em coherence},
 and we'll discuss the factors that lead to coherence and how we might learn them. 
-Later \ref{section:unlearnability}, we'll discuss ways in which our model of coherence
+Later in section \ref{section:unlearnability}, we'll discuss ways in which our model of coherence
 fails as a general explanation of coherence and how we might improve it.
 
 Lets start with a simple model of coherence where we look at a small phrase of words
 and decide if it is coherent. Since we don't know, or rather want to learn, how words
 collocate and compose, we will impose very few restrictions on how the words might
 interact in determining coherence. Lets use a single hidden layer neural network to
-describe this process of determining coherence. The inputs to the network will be one
+describe this process of determining coherence\footnote{Note that while describing
+the properties of this network we will refer to this as a black box computational
+unit that has capabilities to do things like compose and argmax vectors.
+While it is outside of the scope of this work to explain the mechanisms by which this
+occurs, single layer feed forward networks are universal function approximators \cite{Hornik:1989}
+and can represent such computations with enough paramters and training data.
+}.
+The inputs to the network will be one
 vector for every word in the phrase and the output will be a coherence score
 (which we will refer to as $s(\cdot)$).
 The hidden layer in the middle will store some notion of non-linear composition,
@@ -139,8 +140,8 @@ but we will not assume we know how to parse.
 This network has the nice property that we can propagate a gradient all the
 way from the output score back to the values in the word vectors.
 We can then learn features for words by training the network to accomplish
-a disciminative task that looks like comprehension.
-Given a phrase $x$ and a slightly corrupted (and hence incoherent) phrase $\tilde{x}$,
+a discriminative task that looks like comprehension.
+Given a phrase $x$ and a corrupted (and hence incoherent) phrase $\tilde{x}$,
 we want to train our model to recognize that the score of the uncorrupted prhase
 is more coherent than the corrupted one: $s(x) \ge s(\tilde{x}) + 1$.
 This training proceedure, provided we can get coherent phrases and an automatic method of
@@ -170,12 +171,12 @@ around doing it to dogs.
 A more general way to state this is that syntax plays a role in semantic interpretation,
 and we should not remove it entirely from our model of coherence.
 
-Another way is to consider that words that describe events that have
+Another way to remove the syntactic dependence is to consider that words that describe events that have
 different syntactic category live in different places of the vector space
 we are learning our representation in, but that there is some kind of mapping
 between event descriptions. For example we might want to learn a transformation
 on our vector space that takes the vector for ``marry" (in the verbal part
-of the space) to a vector near ``marriage" (in the nominal part of the space).
+of the space) to a vector near ``wedding" (in the nominal part of the space).
 
 % test on NOMLEX, performance is bad
 We tested the plausibility of a model like this by trying to learn this type
@@ -183,8 +184,8 @@ of transformation on labelled pairs of nominal and verbal trigger words for even
 like ``testament" and ``testify". This data was taken from NOMLEX \cite{nomlex},
 which provides us with 3,135 noun-verb pairs.
 We took the embeddings of \cite{rami} and tried to learn a linear map that minimized
-the Euclidean distance between the vector representation for the noun and the
-projected vector for the verb:
+the Euclidean distance between the vector representation for the noun $x_n$ and the
+projected vector for the verb $x_v$:
 \[
 	\min_P \sum_{(n,v) \in \mbox{\texttt{NOMLEX}}}
 		|| x_n - P x_v ||_2^2
@@ -193,7 +194,7 @@ projected vector for the verb:
 When we compared the error of this model (on training data), it
 was not substantially lower than the variance from the mean of the nominal vectors,
 $\sum ||x_n - E[x_n]||_2^2$, which indicates that this model has no hope
-of relating this data in an accurate way. Nonlinear transforms were no attempted
+of relating this data in an accurate way. Nonlinear transforms were not attempted
 due to the size of the data and the apparent difficulty of the mapping.
 
 
@@ -203,14 +204,14 @@ First, since the word representations have not been preprocessed for polysemy, p
 it would be if we assumed that we were projecting a centroid in some conceptual space\footnote{this
 is assuming that the values in a word vector can represent either a point in space (a.k.a. a centroid)
 or a distribution like one that you might get out of a feature vector in a log-linear model}.
-If a word vector needs to store two meaning, e.g. ``testament" as in ``old" or as in what you do in court,
+If a word vector needs to store two meanings, e.g. ``testament" as in ``old" or as in what you do in court,
 then the projection would need to preserve this polysemy, and in a way that represents the
-syntactic category the word appears in, even if that notion might be null in some sense
+syntactic category information, even if that notion might be null in some sense
 (e.g. there is no verb that corresponds to the ``old testament" sense of ``testament" because it is not an event).
 %also instance level info
 
 
-We then might return to our simpler model of coherence,
+We then return to our simpler model of coherence,
 but try to force the vectors we learn for words to be less syntax dependent.
 %One reason benefit of this model is that it can solve the polysemy problem by putting more
 %infromation in the hidden layer via a weak form of composition\footnote{you
@@ -218,7 +219,10 @@ but try to force the vectors we learn for words to be less syntax dependent.
 %over possible compositions}. 
 We can do this by separately modeling the syntactic and conceptual aspects separately.
 Lets define a word vector $v_i$ to be a composition of a vector representing its
-syntactic properties $s_i$ and its non-syntactic properties $w_i$, $v_i = s_i \oplus w_i$.
+syntactic properties $s_i$ and its non-syntactic properties $w_i$.
+\[
+	v_i = s_i \oplus w_i
+\]
 As before, we will build up a phrase vector $x$ by stacking the words in a phrase,
 $x = [v_{i-k}, ..., v_i, ..., v_{i+k}]$, for some small context size $k$.
 We want to come up with a way of learning $s_i$ in a way that will favor syntax and
@@ -227,6 +231,7 @@ so we will represent $s_i$ as a row in a matrix $S_{t(i),\bullet}$,
 where $t(i)$ is the part of speech tag of word $i$. In principle $t(i)$ could be more
 fine grained than a part of speech tag, but it should be easily determined by surface
 forms of the text so that it can be used on large unlabelled datasets.
+We can also arrange all of the $w_i$ as rows in a matrix $W$.
 
 With regard to how $\oplus$ should be implemented, we could use multiplication,
 additions, or some other operator, but we favor vector stacking because it
@@ -250,8 +255,7 @@ Numbers are replaced by a unique token that only says how many digits are in
 the token\footnote{e.g. ``120" $\rightarrow$ \texttt{3D} and ``1995" $\rightarrow$ \texttt{4D}}.
 We then break text up in windows of size 5 ($k=2$) and shuffle all of the instances.
 
-
-The corruption model affects the parameters we learn.
+We need to choose the corruption model carefully because it affects the parameters we learn.
 We follow \cite{rami} in that we only corrupt the middle word of the language model,
 but we still have to decide whether to corrupt the word, its part of speech tag, or both.
 In this work we do not consider perturbations of both because that leads to a very
@@ -271,11 +275,14 @@ A careful implementation could do this efficiently, but that is not in the scope
 The method used in this paper only requires a few bits of entropy and no memory accesses.}.
 
 
-
 The feedforward network was implemented in Theano \cite{theano},
 a python library which provides automatic differentiation and support for GPU computing.
 Training was run using a variant of batched stochastic gradient descent called AdaGrad \cite{adagrad}
 \footnote{Batches of 500 examples worked best in our experiments}.
+We set the dimension of both the syntactic and non-syntactic vectors to be 32
+and the hidden layer to be 40
+(on the small end of the spectrum with respect to previous work,
+but the dimension tends to correlate with training time).
 
 
 
@@ -286,59 +293,138 @@ Training was run using a variant of batched stochastic gradient descent called A
 
 
 \section{Evaluation} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-- pool all nomlex entries (which are words with POS)
-	lookup their C+S representation
-	for each pair (n,v):
-		sort all items by $dist(c(n), \cdot)$
-		compute rank of c(v) in this list
-	show a few of these nearest neighbor lists (include syntax dependent versions too)
+In order to evaluate our model, there are a few perspectives we can take.
+The first question, is does our compositional model of coherence do any better
+than the baseline model of one vector per word?
 
-	compare this method to regular unsupervised + leave one out training of a non-linear projection of n->v
+% d = read.csv('../vanilla-learn-curve.txt', header=F, sep=" ")
+% plot(d)
+From the learning curves, it appears that the baseline method outperforms
+the two part model for the first 150 epochs. It is likely that this is due
+to search error because the baseline is nested in the full model (functional subset).
+It is not clear if more training time would alieviate this problem.
+\begin{figure}[ht]
+\includegraphics[width=\linewidth]{learningCurve.pdf}
+\caption{Held out data learning curves for the baseline model (black) and the
+decomposition model (blue). This is only the first few hours of training
+due to a last minute bug fix.}
+\end{figure}
 
-- compare learning curves for C+S model vs plain W model
 
-- predict event type leave one out
+%- pool all nomlex entries (which are words with POS)
+%	lookup their C+S representation
+%	for each pair (n,v):
+%		sort all items by $dist(c(n), \cdot)$
+%		compute rank of c(v) in this list
+%	show a few of these nearest neighbor lists (include syntax dependent versions too)
+%
+%	compare this method to regular unsupervised + leave one out training of a non-linear projection of n->v
+%
+%- compare learning curves for C+S model vs plain W model
+
+We also want to know about the nature of the syntax-stripped vectors we learn, in $W$.
+In this work we have regarded the conceptual or semantic properties of a word simply as
+the residual of what syntax doesn't explain. This notion is a bit unhelpful in light
+of the fact that there are properties of words that we commonly refer to ``semantic" properties,
+and we would like to know if we are learning a representation that speaks to these properties.
+To explore one aspect of this, we consider a low-resource classification task where
+the labels are semantic properties that do not seem to be related to the surface forms
+of the words used to describe them, namely the event class of {\em State}, {\em Process},
+and {\em Accomplishment}\footnote{data taken from \url{http://www.sfu.ca/person/dearmond/322/322.event.class.htm}}.
+Given only 45 verbs across these classes, the leave-one-out accuracy of a classifier trained
+on the representations of these words achived 73\% accuracy, significantly greater than would
+be achieved by guessing the most common class (36\%)\footnote{the vectors for this experiment
+were taken from the baseline model}.
+This indicates that whatever is being learned, it is correlated with at least one aspect of
+what we consider to be relevant properties to the semantics of events.
 
 
 
 
-\section{What we can't/won't learn (and why)} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+\section{Shortcomings} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \label{section:unlearnability}
-% 1 page
-- we are not modeling anything at the *instance* level, only type level
-- we are not modeling the argument structure or theta roles of an event
+Though we have discussed our hypothesis of how predicate argument descriptions
+appear in text, and how our model might learn from these patterns, it is worth
+dwelling on the shortcomings of this model.
 
-- no instances: any time you see the word foo, it means exactly the same thing
-	- forces instance-idiosyncratic information into the A matrix
-	- A matrix is not specific to any setup (e.g. syntactic category), so this is a high burden
-	- polysemy can be encoded in W, but there is no regular treatment of it, so training has to figure this out
+% no parsing
+% locality
+% no explicit argument structure
+%	negative interaction between arguments is difficult if one is consistenly outside the window
+The most obvious objection is that this model is very local in it's view of composition.
+Long distance dependencies pose a problem in this model with respect to argument
+interaction. If we assumed that arguments were independent conditioned on the predicate,
+and that with some probability arguments appeared in the same phrase as their predicate,
+then we might hope to learn the selectional preferences. However, if there are interactions
+between the arguments, and we consistently see only some of the arguments in the phrase,
+then the model has no way to tell if the argument is conditionally likely or not given
+the limited information in the phrase.
 
-- we take narrow windows: many arguments will be external to the window
-	- even ARG0 won't consistenly be in the window of a predicate (mostly verb for this statement)
-		because ARG0 may or may not be the syntactic subject
-	- training proceedure never sees full views of entire argumen structure
-	***	- e.g. if there is a negative interaction between arguments that don't appear together => can't learn this!
-
-
-\section{Improvements}
-
-- train on dependency parses (not low resource)
-	- teaches you selectional preferences, but no better than the parser was!
-
-- train on consecutive verbs or subjects
-	- teaches you about discourse
-	- the event described before and after an event is likely to be relevant (e.g. scripts)
-
-- use bags of words related to an event with an intruder
-
-- adaptive corruption (more plausible interlopers)
+Related to this objection is the objection that there is no parsing or modeling of
+binary constituent unification.
+The easiest and perhaps least satisfying response to this is that parsing and models
+of larger spans of text are outside of our computational ability right now. To put this
+in perspective, even with a model that was chosen for its computational efficiency like
+this one, training high quality vectors can take three \cite{rami} to
+eight \cite{DBLP:journals/corr/abs-1301-3781} {\em weeks} of CPU time.
+This is not to detract from the value of these training routines, which should be weighed
+against the main-years of effort required to come up with them.
+But training on tree structure or wider windows will likely take advances in either
+neural net training techniques or computational power.
 
 
 
-\section{Previous Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% no instances
+% no regular treatment of polysemy
+Another problem with this model is that there is no explicit attempt to model
+instances of data rather than types. That is, we learn representations for
+words, but never reason explicitly about the meaning of a word in context aside
+from the state of the hidden layer of the network. 
+This means that ambiguity, be it introduced by polysemy or non-determinsm in
+composition, is reasoned about in an ad hoc and flat way.
+Some work has addressed this problem \cite{multiplePrototypes1,multiplePrototypes2}.
+
+
+
+
+% no formal semantics -> no worse than Hobbs, he provides no explanation of where predicates come from
+
+% not grounded
+Lastly, this model lives in an ungrounded paradigm of learning. Whatever it learns,
+it learns from the New York Times, and can never observe any of the events described.
+This means that it has no real sense of time or duration, but rather only represents
+these concepts as far as they help explain the text it sees.
+It is an open question of how much real world knowledge can be learn only from text
+and whether this can be learned without a systematic prior or bias that is present only in humans.
+The experiment concerning event class at least indicates that somethings that are
+not obvious, like telicity, show up in a systematic enough way that the model can learn
+something correlated with it.
+
+
+
+
+
+
+
+%\section{Improvements}
+%- train on dependency parses (not low resource)
+%	- teaches you selectional preferences, but no better than the parser was!
+%
+%- train on consecutive verbs or subjects
+%	- teaches you about discourse
+%	- the event described before and after an event is likely to be relevant (e.g. scripts)
+%
+%- use bags of words related to an event with an intruder
+%
+%- adaptive corruption (more plausible interlopers)
+
+
+
+\section{Related Work} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 Work in neural representations and language models has a long history
 \cite{foundation1,foundation2,foundation3} inter alia,
-and has only recently regained a lot of attention.
+and has recently regained a lot of attention.
 
 % - scalar adjectives (deMarneffe)
 
@@ -355,7 +441,7 @@ a few vector representation models improved the state of the art in NER tagging 
 
 
 \cite{MikolovYZ13} analyzed the representations learned using
-a recurrent neural network language model described in \cite{DBLP:conf/interspeech/KombrinkMKB11}
+	a recurrent neural network language model described in \cite{DBLP:conf/interspeech/KombrinkMKB11}
 which was initially created to aid in machine translation.
 \cite{MikolovYZ13} however showed that the representations learned by the
 language model were not only very good for that task, but also for the
@@ -391,8 +477,10 @@ reflected a change in syntactic category, which was between adjectives and adver
 %how to learn passive alternation? "john killed" vs "john was killed"
 
 \section{Conclusion} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% TODO
-write this
+We present a basic model of coherence that induces features for words
+which shed light on their syntactic and conceptual properties.
+
+
 
 
 
