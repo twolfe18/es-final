@@ -26,7 +26,7 @@ This is a hard problem because event mentions are weakly
 tied to syntax and can be realized in may ways.
 We discuss the justifications for a model that decomposes
 coherence into syntactic and conceptual aspects and
-provide a training proceedure for it.
+provide a training procedure for it.
 An evaluation framework is provided but without results due
 to difficulty with numerical optimization.
 \end{abstract}
@@ -37,11 +37,11 @@ to difficulty with numerical optimization.
 % 1 page
 %%% GENERAL
 Knowledge representations for events in natural language has been given many different treatments.
-Much linguistic work does not conern itself with the problem of learning and
+Much linguistic work does not concern itself with the problem of learning and
 the representation on which they study linguistic regularities.
 In NLP representations are often comprised of ad hoc feature and lists of
 trigger words which are only available as long as there is an expert able to write them.
-This data is often task specific and difficult to aquire.
+This data is often task specific and difficult to acquire.
 Some annotated corpora have been created with frames or propositions labelled
 in hopes that machine learning techniques might generalize this supervision to new data.
 %Connectionists seek unification between the study of the neural representations
@@ -103,7 +103,7 @@ systematically idiosyncratic to the event/predicate being described.
 
 Thus we are beginning to describe a statistical theory of coherence
 based on locality of predicate and argument trigger words.
-What remains is to define mathematically how this coherence should be modelled.
+What remains is to define mathematically how this coherence should be modeled.
 
 
 \section{Model} %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -112,10 +112,10 @@ the simplest way to do this is via language modeling, i.e. inducing
 a score or probability distribution over word sequences.
 Previous work has shown that we can learn very fine grained information
 by inducing features for a language model (c.f. related work).
-While previous work has referred to this as language modelling,
+While previous work has referred to this as language modeling,
 this has the unwanted connotation that we are interested in the
 numerical scores that come out of the language model for some NLP task.
-Instead, we'll refer to our modelling as addressing {\em coherence},
+Instead, we'll refer to our modeling as addressing {\em coherence},
 and we'll discuss the factors that lead to coherence and how we might learn them. 
 Later in section \ref{section:unlearnability}, we'll discuss ways in which our model of coherence
 fails as a general explanation of coherence and how we might improve it.
@@ -129,7 +129,7 @@ the properties of this network we will refer to this as a black box computationa
 unit that has capabilities to do things like compose and argmax vectors.
 While it is outside of the scope of this work to explain the mechanisms by which this
 occurs, single layer feed forward networks are universal function approximators \cite{Hornik:1989}
-and can represent such computations with enough paramters and training data.
+and can represent such computations with enough parameters and training data.
 }.
 The inputs to the network will be one
 vector for every word in the phrase and the output will be a coherence score
@@ -142,10 +142,10 @@ way from the output score back to the values in the word vectors.
 We can then learn features for words by training the network to accomplish
 a discriminative task that looks like comprehension.
 Given a phrase $x$ and a corrupted (and hence incoherent) phrase $\tilde{x}$,
-we want to train our model to recognize that the score of the uncorrupted prhase
+we want to train our model to recognize that the score of the uncorrupted phrase
 is more coherent than the corrupted one: $s(x) \ge s(\tilde{x}) + 1$.
-This training proceedure, provided we can get coherent phrases and an automatic method of
-corruption, means that we can train on as much unlabelled training data as we have.
+This training procedure, provided we can get coherent phrases and an automatic method of
+corruption, means that we can train on as much unlabeled training data as we have.
 
 The model just described closely resembles the model of \cite{rami}, and
 can learn fine grained (seemingly) semantic similarities like ``Apple" is
@@ -159,13 +159,13 @@ If we want a more general notion of similarity, or in this case type-level event
 coreference\footnote{type-level event coreference in the sense that instances may
 not be coreferent, the phrase ``John married Mary" describes a different event from
 ``John and Mary's wedding", but holding the all of the arguments constant, coreference holds.},
-then we need to relax the assumption of replacability in a sequence of words with
+then we need to relax the assumption of replaceability in a sequence of words with
 a less syntax dependent notion of coherence.
 
 One way to do this is to remove the order of the words in the sequence
 (this is used in the CBOW method of \cite{DBLP:journals/corr/abs-1301-3781}),
 but this throws the baby out with the bathwater. With no order you cannot
-tell the differnce between ``dog bites man" and ``man bites dog", and surely
+tell the difference between ``dog bites man" and ``man bites dog", and surely
 you would learn a different conception of ``biting" if you thought people went
 around doing it to dogs.
 A more general way to state this is that syntax plays a role in semantic interpretation,
@@ -199,7 +199,7 @@ due to the size of the data and the apparent difficulty of the mapping.
 
 
 % shouldn't work anyway
-On second inpsection it doesn't seem like this method of projection would work for a few reasons.
+On second inspection it doesn't seem like this method of projection would work for a few reasons.
 First, since the word representations have not been preprocessed for polysemy, projection is much harder than
 it would be if we assumed that we were projecting a centroid in some conceptual space\footnote{this
 is assuming that the values in a word vector can represent either a point in space (a.k.a. a centroid)
@@ -230,7 +230,7 @@ be tied between various words (else we have something that is equivalent to the 
 so we will represent $s_i$ as a row in a matrix $S_{t(i),\bullet}$,
 where $t(i)$ is the part of speech tag of word $i$. In principle $t(i)$ could be more
 fine grained than a part of speech tag, but it should be easily determined by surface
-forms of the text so that it can be used on large unlabelled datasets.
+forms of the text so that it can be used on large unlabeled datasets.
 We can also arrange all of the $w_i$ as rows in a matrix $W$.
 
 With regard to how $\oplus$ should be implemented, we could use multiplication,
@@ -302,7 +302,7 @@ than the baseline model of one vector per word?
 From the learning curves, it appears that the baseline method outperforms
 the two part model for the first 150 epochs. It is likely that this is due
 to search error because the baseline is nested in the full model (functional subset).
-It is not clear if more training time would alieviate this problem.
+It is not clear if more training time would alleviate this problem.
 \begin{figure}[ht]
 \includegraphics[width=\linewidth]{learningCurve.pdf}
 \caption{Held out data learning curves for the baseline model (black) and the
@@ -332,7 +332,7 @@ the labels are semantic properties that do not seem to be related to the surface
 of the words used to describe them, namely the event class of {\em State}, {\em Process},
 and {\em Accomplishment}\footnote{data taken from \url{http://www.sfu.ca/person/dearmond/322/322.event.class.htm}}.
 Given only 45 verbs across these classes, the leave-one-out accuracy of a classifier trained
-on the representations of these words achived 73\% accuracy, significantly greater than would
+on the representations of these words achieved 73\% accuracy, significantly greater than would
 be achieved by guessing the most common class (36\%)\footnote{the vectors for this experiment
 were taken from the baseline model}.
 This indicates that whatever is being learned, it is correlated with at least one aspect of
@@ -381,7 +381,7 @@ Another problem with this model is that there is no explicit attempt to model
 instances of data rather than types. That is, we learn representations for
 words, but never reason explicitly about the meaning of a word in context aside
 from the state of the hidden layer of the network. 
-This means that ambiguity, be it introduced by polysemy or non-determinsm in
+This means that ambiguity, be it introduced by polysemy or non-determinism in
 composition, is reasoned about in an ad hoc and flat way.
 Some work has addressed this problem \cite{multiplePrototypes1,multiplePrototypes2}.
 
@@ -431,8 +431,8 @@ and has recently regained a lot of attention.
 % collobert and weston
 \cite{DBLP:conf/icml/CollobertW08} built a multi-task NLP system based
 on vector representation models which was trained to predict NER tags,
-chunknings, and semantic role labelings. The SRL task is the most relevant
-to this work, but their training proceedure was fully supervised and
+chunkings, and semantic role labelings. The SRL task is the most relevant
+to this work, but their training procedure was fully supervised and
 is differs greatly from this work.
 
 % turian
@@ -452,7 +452,7 @@ which induces representations with similar properties to those learned using
 a probabilistic language models, but with greatly accelerated training.
 This model achieved state of the art part of speech tagging accuracy (or near it)
 for many languages given only a very small labeled training set and the representations
-learned on unlabelled data.
+learned on unlabeled data.
 \cite{DBLP:journals/corr/abs-1301-3781} also focussed on efficient training and
 proposed a similar model that sums rather than concatenates the input vectors,
 and another that is just the reverse prediction task with the same network structure
@@ -485,7 +485,7 @@ which shed light on their syntactic and conceptual properties.
 
 
 \bibliography{sources}{}
-\bibliographystyle{plain}
+\bibliographystyle{naaclhlt2013}
 
 \end{document}
 
